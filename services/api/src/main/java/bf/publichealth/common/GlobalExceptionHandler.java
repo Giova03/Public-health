@@ -12,6 +12,8 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import bf.publichealth.modules.identity.domain.PatientDuplicateException;
+import bf.publichealth.modules.identity.domain.PatientMergedException;
 import bf.publichealth.modules.payments.domain.IllegalPaymentTransitionException;
 import bf.publichealth.modules.payments.domain.WebhookSignatureInvalidException;
 
@@ -36,6 +38,25 @@ public class GlobalExceptionHandler {
         // 401 générique : on ne donne rien d'exploitable à un falsificateur.
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.UNAUTHORIZED, e.getMessage());
         problem.setTitle("Webhook rejeté");
+        return ResponseEntity.of(problem).build();
+    }
+
+    @ExceptionHandler(PatientDuplicateException.class)
+    public ResponseEntity<ProblemDetail> patientDuplicate(PatientDuplicateException e) {
+        // 409 = contrat UX (ADR-003) : les candidats VOYAGENT dans la réponse,
+        // l'agent décide humainement — jamais de fusion ou de création en silence.
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+        problem.setTitle("Patient probablement déjà enregistré");
+        problem.setProperty("candidates", e.getCandidates());
+        return ResponseEntity.of(problem).build();
+    }
+
+    @ExceptionHandler(PatientMergedException.class)
+    public ResponseEntity<ProblemDetail> patientMerged(PatientMergedException e) {
+        // 410 : le dossier a fusionné — le consommateur suit le maître.
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.GONE, e.getMessage());
+        problem.setTitle("Dossier fusionné");
+        problem.setProperty("masterId", e.getMasterId());
         return ResponseEntity.of(problem).build();
     }
 
