@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Activity,
   BadgeCheck,
@@ -11,9 +12,11 @@ import {
   HeartPulse,
   Layers,
   ScrollText,
+  Search,
   ShieldCheck,
   Smartphone,
   TestTube2,
+  UserPlus,
 } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { PaymentStepper } from "@/components/payment-stepper";
@@ -29,6 +32,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useEtatReseau } from "@/hooks/use-etat-reseau";
 
 const SPRINT0_DONE = [
   "Monorepo échafaudé : apps/pwa + services/api",
@@ -134,6 +138,7 @@ const KPIS = [
 
 export default function Home() {
   const { toast } = useToast();
+  const { enAttente } = useEtatReseau();
 
   const notifySync = () => {
     toast({
@@ -145,7 +150,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen w-full">
-      <AppHeader queuedOperations={0} />
+      <AppHeader queuedOperations={enAttente} />
 
       <main className="mx-auto w-full max-w-6xl flex-1 space-y-6 px-4 py-8 sm:px-6">
         {/* HERO */}
@@ -178,6 +183,34 @@ export default function Home() {
             (données). Monolithe modulaire, FHIR R4 en façade, offline-first
             non négociable, patient d'abord.
           </p>
+        </section>
+
+        {/* ACCÈS RAPIDES — registre des patients (épique E1) */}
+        <section aria-label="Accès rapides">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Button asChild size="lg" className="h-14 justify-start gap-3 px-5 text-base">
+              <Link href="/patients">
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-foreground/15"
+                  aria-hidden="true"
+                >
+                  <Search className="h-5 w-5" />
+                </span>
+                Rechercher un patient
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-14 justify-start gap-3 px-5 text-base">
+              <Link href="/patients/nouveau">
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                  aria-hidden="true"
+                >
+                  <UserPlus className="h-5 w-5" />
+                </span>
+                Nouveau dossier patient
+              </Link>
+            </Button>
+          </div>
         </section>
 
         {/* KPI */}
@@ -289,10 +322,10 @@ export default function Home() {
                       {epic.title}
                     </p>
                     <Badge
-                      variant="secondary"
+                      variant={epic.id === "E1" ? "default" : "secondary"}
                       className="shrink-0 text-[10px] font-normal"
                     >
-                      Backlog
+                      {epic.id === "E1" ? "API + PWA livrées" : "Backlog"}
                     </Badge>
                   </div>
                   <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
