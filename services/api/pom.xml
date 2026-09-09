@@ -41,6 +41,13 @@
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
+    <!-- Épique E8 : scraping Prometheus — la version est gérée par le BOM
+         du parent spring-boot-starter-parent (micrometer-bom), AUCUNE
+         version explicite : alignement automatique sur la pile Boot. -->
+    <dependency>
+      <groupId>io.micrometer</groupId>
+      <artifactId>micrometer-registry-prometheus</artifactId>
+    </dependency>
     <!-- Épique E5 : serveur de ressources OAuth2 — vérification JWT Supabase
          (RS256 via JWKS) ou HS256 (secret local dev/test), activable par
          securite.jwt.actif (faux par défaut : posture Sprint 0 conservée). -->
