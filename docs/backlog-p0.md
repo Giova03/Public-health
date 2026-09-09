@@ -8,16 +8,16 @@ sécurité → observabilité → documentation → vérification.
 
 ## Épiques
 
-| # | Épique | Scénario critique couvert | Contenu |
-|---|--------|---------------------------|---------|
-| E1 | Identité & MPI | Patient dupliqué | Recherche miroir locale, création avec détection de doublons (409 = contrat UX), file de revue des rapprochements, fusion tracée et irréversible |
-| E2 | Consultation offline + sync | Consultation hors ligne, reprise réseau | UUID v7 côté client, append-only, outbox IndexedDB → /sync/batch idempotent (opId), trois régimes de conflit, curseurs par appareil |
-| E3 | Ordonnance & dispensation | Dispensation multi-sources | Ordonnance (interne + HUB simulé), dispensation append-only, enveloppe HMAC signée, séquences + filigrane, DLQ |
-| E4 | Paiements FedaPay complets | Webhook dupliqué, réseau coupé pendant le paiement | Réconciliation nocturne (fait foi), vérification HMAC réelle, gestion des orphelins, rapprochement factures/transactions |
-| E5 | Audit & sécurité | Accès d'urgence (break-the-glass), accès hors périmètre | Audit six dimensions chaîné complet, RLS intégrale (INSERT/UPDATE policies + FORCE), JWT Supabase, Bucket4j, revue OWASP ASVS L2 |
-| E6 | Back-office minimal | Gouvernance de base | Utilisateurs, structures sanitaires, rôles, MFA administrateur |
-| E7 | Façade FHIR lecture/recherche | Interopérabilité sortante | 19 ressources en lecture/recherche, validateur HAPI en CI (déjà branché), CapabilityStatement complet |
-| E8 | Observabilité & durcissement | SLO respectés, restauration testée | Dashboards SLO, alertes, sauvegarde 3-2-1 avec exercice de restauration, supervision des quotas |
+| # | Épique | Scénario critique couvert | Contenu | État |
+|---|--------|---------------------------|---------|------|
+| E1 | Identité & MPI | Patient dupliqué | Recherche miroir locale, création avec détection de doublons (409 = contrat UX), file de revue des rapprochements, fusion tracée et irréversible | ✅ API (V6, 36 tests) + PWA (recherche, création, dialogue doublons 409, miroir offline, 410→master) |
+| E2 | Consultation offline + sync | Consultation hors ligne, reprise réseau | UUID v7 côté client, append-only, outbox IndexedDB → /sync idempotent (opId), trois régimes de conflit, curseurs par appareil | ✅ API (V7 : uplink par lot idempotent, delta miroir patients, devices) — reste le moteur de synchro PWA (drain outbox + pull delta) |
+| E3 | Ordonnance & dispensation | Dispensation multi-sources | Ordonnance (interne + HUB simulé), dispensation append-only, enveloppe HMAC signée, séquences + filigrane, DLQ | ✅ Module interne (V8 : prescriptions append-only, dispensation partielle cumulée, contre-entrées, idempotence offline) — connecteur HUB et écran PWA restants |
+| E4 | Paiements FedaPay complets | Webhook dupliqué, réseau coupé pendant le paiement | Réconciliation nocturne (fait foi), vérification HMAC réelle, gestion des orphelins, rapprochement factures/transactions | |
+| E5 | Audit & sécurité | Accès d'urgence (break-the-glass), accès hors périmètre | Audit six dimensions chaîné complet, RLS intégrale (INSERT/UPDATE policies + FORCE), JWT Supabase, Bucket4j, revue OWASP ASVS L2 | |
+| E6 | Back-office minimal | Gouvernance de base | Utilisateurs, structures sanitaires, rôles, MFA administrateur | |
+| E7 | Façade FHIR lecture/recherche | Interopérabilité sortante | 19 ressources en lecture/recherche, validateur HAPI en CI (déjà branché), CapabilityStatement complet | |
+| E8 | Observabilité & durcissement | SLO respectés, restauration testée | Dashboards SLO, alertes, sauvegarde 3-2-1 avec exercice de restauration, supervision des quotas | |
 
 ## Définition de terminé (DoD) — chaque story
 
