@@ -23,6 +23,8 @@ import bf.publichealth.modules.payments.adapter.persistence.PaymentEntity;
 import bf.publichealth.modules.payments.adapter.persistence.PaymentRepository;
 import bf.publichealth.modules.payments.adapter.persistence.PaymentTransitionEntity;
 import bf.publichealth.modules.payments.adapter.persistence.PaymentTransitionRepository;
+import bf.publichealth.modules.payments.adapter.persistence.ReconciliationDiscrepancyEntity;
+import bf.publichealth.modules.payments.adapter.persistence.ReconciliationDiscrepancyRepository;
 import bf.publichealth.modules.payments.adapter.persistence.WebhookEventEntity;
 import bf.publichealth.modules.payments.adapter.persistence.WebhookEventRepository;
 import bf.publichealth.modules.payments.domain.IllegalPaymentTransitionException;
@@ -65,6 +67,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final PaymentTransitionRepository transitionRepository;
     private final WebhookEventRepository webhookEventRepository;
+    private final ReconciliationDiscrepancyRepository discrepancyRepository;
     private final SignatureVerifier signatureVerifier;
     private final AuditRecorder auditRecorder;
     private final ObjectMapper objectMapper;
@@ -72,12 +75,14 @@ public class PaymentService {
     public PaymentService(PaymentRepository paymentRepository,
                           PaymentTransitionRepository transitionRepository,
                           WebhookEventRepository webhookEventRepository,
+                          ReconciliationDiscrepancyRepository discrepancyRepository,
                           SignatureVerifier signatureVerifier,
                           AuditRecorder auditRecorder,
                           ObjectMapper objectMapper) {
         this.paymentRepository = paymentRepository;
         this.transitionRepository = transitionRepository;
         this.webhookEventRepository = webhookEventRepository;
+        this.discrepancyRepository = discrepancyRepository;
         this.signatureVerifier = signatureVerifier;
         this.auditRecorder = auditRecorder;
         this.objectMapper = objectMapper;
@@ -154,6 +159,12 @@ public class PaymentService {
             // Webhook orphelin = incident : consigné pour investigation, acquitté pour arrêter les rejeux.
             webhookEventRepository.save(new WebhookEventEntity(eventId, "fedapay",
                     sha256(rawBody), true, "ORPHAN"));
+            // Écart durable (épique E4) : la réconciliation nocturne tentera de
+            // résoudre l'orphelin quand le paiement apparaîtra (paiement initié
+            // après le webhook, référence enfin connue).
+            discrepancyRepository.save(new ReconciliationDiscrepancyEntity(
+                    UuidV7.next(), null, null, reference, "WEBHOOK_ORPHELIN",
+                    "Webhook reçu sans paiement connu pour la référence — à résoudre par la réconciliation"));
             LOG.warn("Webhook orphelin eventId={} reference={}", eventId, reference);
             return new WebhookAck("ORPHAN", "Référence inconnue — consigné pour investigation");
         }
