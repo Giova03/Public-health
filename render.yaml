@@ -1,0 +1,34 @@
+# Blueprint Render — déploiement staging.
+# 1. Créer le dépôt GitHub (voir scripts/push-to-github.sh) puis « New + Blueprint »
+#    sur https://dashboard.render.com en pointant sur ce dépôt.
+# 2. Renseigner FEDAPAY_WEBHOOK_SECRET dans l'environnement Render (secret).
+#
+# NB : plan « starter » pour l'API (runtime Docker payant chez Render),
+# base « free » pour le staging (expire après 90 jours — suffisant pour P0).
+
+services:
+  - type: web
+    name: ph-api
+    runtime: docker
+    rootDir: services/api
+    dockerfilePath: ./Dockerfile
+    plan: starter
+    healthCheckPath: /actuator/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ph-db
+          property: connectionString
+      - key: SPRING_PROFILES_ACTIVE
+        value: staging
+      - key: FEDAPAY_WEBHOOK_SECRET
+        sync: false
+      - key: APP_ORIGINES
+        value: https://public-health.vercel.app
+
+databases:
+  - name: ph-db
+    plan: free
+    databaseName: publichealth
+    user: publichealth
