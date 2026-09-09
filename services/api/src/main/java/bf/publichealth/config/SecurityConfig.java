@@ -155,8 +155,10 @@ public class SecurityConfig {
                                 .anyRequest().denyAll();
                     } else {
                         // Posture Sprint 0 — inchangée (défaut).
+                        // /fhir/** ouvert comme /api/v1/** en P0 (façade lecture ;
+                        // verrouillage partenaire avec E6 — voir ADR-011).
                         auth.requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
-                                .requestMatchers("/api/v1/**").permitAll()
+                                .requestMatchers("/api/v1/**", "/fhir/**").permitAll()
                                 .anyRequest().denyAll();
                     }
                 });
