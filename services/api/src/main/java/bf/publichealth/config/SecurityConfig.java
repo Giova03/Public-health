@@ -63,6 +63,9 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  *       insuffisant ({@code /api/v1/admin/**} requiert ROLE_ADMIN —
  *       convention P0, étendue par le RBAC E6). La sonde
  *       {@code /actuator/health/**} reste OUVERTE (contrat CI/infra).
+ *       Le scraping Prometheus {@code /actuator/prometheus} (épique E8)
+ *       exige une AUTHENTIFICATION — PAS un rôle : le scraper Grafana
+ *       porte un JETON DE SERVICE lecture, pas un compte admin.
  *       L'uplink machine {@code /api/v1/sync} est authentifié comme le
  *       reste de l'API — AUCUNE exception métier en P0 (documenté : les
  *       clients machine portent un jeton de service) ;</li>
@@ -71,6 +74,14 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  *   <li>{@link FiltreContexteRls} + {@link ControleRlsDataSource} posent
  *       la GUC {@code app.user_id} : les policies RLS de V10 mordent.</li>
  * </ul>
+ *
+ * <p>Épique E8 — observabilité : {@code /actuator/prometheus} suit la
+ * posture du moment : OUVERT en posture Sprint 0 (JWT inactif — défaut,
+ * le scraper local lit librement), AUTHENTIFIÉ quand
+ * {@code securite.jwt.actif=true} (le scraper présentera un jeton de
+ * service lecture ; pas de ROLE_ADMIN : un superviseur n'est pas un
+ * administrateur fonctionnel). {@code /actuator/health/**} reste ouvert
+ * dans les deux postures (contrat CI/répartiteur de charge).</p>
  *
  * <p>Les protections d'en-têtes restent inchangées et non négociables :
  * HSTS (31 536 000 s, sous-domaines inclus), X-Frame-Options DENY,
@@ -152,12 +163,21 @@ public class SecurityConfig {
                                 .requestMatchers("/api/v1/**", "/fhir/**").authenticated()
                                 // Sonde d'infra : OUVERTE même JWT actif (contrat CI/LB).
                                 .requestMatchers("/actuator/health/**").permitAll()
+                                // Épique E8 : scraping Prometheus — AUTHENTIFIÉ, PAS
+                                // ROLE_ADMIN : le scraper (Grafana Agent, Prometheus)
+                                // présentera un JETON DE SERVICE lecture. Sans jeton → 401
+                                // problem+json, comme le reste de l'API.
+                                .requestMatchers("/actuator/prometheus").authenticated()
                                 .anyRequest().denyAll();
                     } else {
                         // Posture Sprint 0 — inchangée (défaut).
                         // /fhir/** ouvert comme /api/v1/** en P0 (façade lecture ;
                         // verrouillage partenaire avec E6 — voir ADR-011).
+                        // /actuator/prometheus (épique E8) : OUVERT dans cette
+                        // posture — en production (JWT actif) le scraper présentera
+                        // un jeton de service (matcher "authenticated" ci-dessus).
                         auth.requestMatchers("/actuator/health/**", "/actuator/info").permitAll()
+                                .requestMatchers("/actuator/prometheus").permitAll()
                                 .requestMatchers("/api/v1/**", "/fhir/**").permitAll()
                                 .anyRequest().denyAll();
                     }

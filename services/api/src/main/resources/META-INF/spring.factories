@@ -1,0 +1,4 @@
+# Épique E8 — observabilité : exposition programmatique de /actuator/prometheus
+# (défaut dans le code, application.yml intouchable — cf. ExpositionPrometheusEnvironnement).
+org.springframework.boot.env.EnvironmentPostProcessor=\
+  bf.publichealth.config.observabilite.ExpositionPrometheusEnvironnement
