@@ -47,7 +47,8 @@ export interface MetaAppareil {
   dernierContact: number | null;
 }
 
-function uuidV7(): string {
+// Généré côté client : clé d'idempotence offline (E1 création, E2 sync).
+export function uuidV7(): string {
   // RFC 9562 — 48 bits d'horodatage ms, version 7, variante RFC.
   const octets = crypto.getRandomValues(new Uint8Array(16));
   const ms = Date.now();
@@ -148,6 +149,11 @@ export function ecrireDansMirror<T>(entree: EntreeMirror<T>): Promise<IDBValidKe
 
 export function lireDepuisMirror<T>(cle: string): Promise<EntreeMirror<T> | undefined> {
   return transaction("mirror", "readonly", (m) => m.get(cle) as IDBRequest<EntreeMirror<T> | undefined>);
+}
+
+/** Tout le miroir (E1 : recherche locale des dossiers consultés). */
+export function listerMirror(): Promise<EntreeMirror[]> {
+  return transaction("mirror", "readonly", (m) => m.getAll() as IDBRequest<EntreeMirror[]>);
 }
 
 // ------------------------------------------------------------------

@@ -1,6 +1,11 @@
-import { HeartPulse } from "lucide-react";
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { HeartPulse, Users } from "lucide-react";
 import { SyncStatusBadge } from "@/components/sync-status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 interface AppHeaderProps {
   /** Nom affiché de l'utilisateur connecté */
@@ -10,22 +15,38 @@ interface AppHeaderProps {
   queuedOperations?: number;
 }
 
+const LIENS = [
+  { href: "/", libelle: "Accueil", icone: null, exact: true },
+  {
+    href: "/patients",
+    libelle: "Patients",
+    icone: Users,
+    exact: false,
+  },
+] as const;
+
 /**
  * AppHeader — barre applicative permanente.
- * Contient : identité du produit, état réseau/synchronisation, utilisateur.
- * L'état réseau est visible en permanence (principe UX n°1).
+ * Contient : identité du produit, navigation primaire, état réseau/
+ * synchronisation, utilisateur. L'état réseau est visible en permanence
+ * (principe UX n°1). Sur téléphone, la navigation passe par les accès
+ * rapides de l'accueil et les liens « Retour » des écrans.
  */
 export function AppHeader({
   userName = "Aminata S.",
   facility = "CSPS Ouaga 12",
   queuedOperations = 0,
 }: AppHeaderProps) {
+  const chemin = usePathname();
   const initials = userName
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
+
+  const estActif = (lien: (typeof LIENS)[number]): boolean =>
+    lien.exact ? chemin === lien.href : chemin.startsWith(lien.href);
 
   return (
     <header
@@ -48,6 +69,32 @@ export function AppHeader({
               Burkina Faso · Plateforme nationale
             </p>
           </div>
+
+          {/* Navigation primaire — compacte sur tablette, large sur desktop */}
+          <nav
+            aria-label="Navigation principale"
+            className="ml-2 hidden items-center gap-1 sm:flex"
+          >
+            {LIENS.map((lien) => {
+              const Icone = lien.icone;
+              return (
+                <Link
+                  key={lien.href}
+                  href={lien.href}
+                  aria-current={estActif(lien) ? "page" : undefined}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors",
+                    estActif(lien)
+                      ? "bg-accent text-accent-foreground"
+                      : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                  )}
+                >
+                  {Icone && <Icone className="h-4 w-4" aria-hidden="true" />}
+                  {lien.libelle}
+                </Link>
+              );
+            })}
+          </nav>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
