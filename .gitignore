@@ -1,0 +1,30 @@
+# Dépendances
+node_modules/
+
+# Builds
+.next/
+out/
+dist/
+build/
+target/
+*.tsbuildinfo
+
+# Environnement — JAMAIS de secret versionné
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Journaux
+*.log
+dev.log
+npm-debug.log*
+
+# Divers
+.DS_Store
+.vercel
+.idea/
+.vscode/
+*.iml
+coverage/
+next-env.d.ts
