@@ -1,0 +1,32 @@
+{
+  "resourceType": "Patient",
+  "id": "exemple-patient",
+  "identifier": [
+    {
+      "system": "urn:ph:patient:numero",
+      "value": "PH-2026-000001"
+    }
+  ],
+  "name": [
+    {
+      "use": "official",
+      "family": "Ouedraogo",
+      "given": ["Aminata"]
+    }
+  ],
+  "gender": "female",
+  "birthDate": "1994-06-15",
+  "telecom": [
+    {
+      "system": "phone",
+      "value": "+22670112233",
+      "use": "mobile"
+    }
+  ],
+  "address": [
+    {
+      "country": "BF",
+      "city": "Ouagadougou"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "resourceType": "Observation",
+  "id": "exemple-observation",
+  "status": "final",
+  "code": {
+    "coding": [
+      {
+        "system": "http://loinc.org",
+        "code": "8867-4",
+        "display": "Frequence cardiaque"
+      }
+    ],
+    "text": "Frequence cardiaque"
+  },
+  "subject": {
+    "reference": "Patient/exemple-patient"
+  },
+  "effectiveDateTime": "2026-09-09T10:30:00+00:00",
+  "valueQuantity": {
+    "value": 72,
+    "unit": "battements/minute",
+    "system": "http://unitsofmeasure.org",
+    "code": "/min"
+  }
+}
