@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: API — build + tests (Testcontainers)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      # Docker est disponible sur les runners GitHub : les tests taggés
+      # « integration » tournent alors sur Testcontainers (postgres:16).
+      # Sans Docker (poste local), le même test bascule sur zonky embarqué.
+      - name: Build, tests unitaires + intégration, validation FHIR
+        run: mvn -B -ntp verify
+
+      - name: Publier les résultats de tests
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rapports-tests-api
+          path: |
+            services/api/target/surefire-reports/*
+            services/api/target/failsafe-reports/*
+          retention-days: 7
+
+  pwa:
+    name: PWA — lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint --workspace @public-health/pwa
+
+      - name: Build
+        run: npm run build --workspace @public-health/pwa
