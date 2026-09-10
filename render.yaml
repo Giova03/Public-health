@@ -10,7 +10,7 @@ services:
   - type: web
     name: ph-api
     runtime: docker
-    rootDir: services/api
+    rootDir: backend
     dockerfilePath: ./Dockerfile
     plan: starter
     healthCheckPath: /actuator/health
