@@ -1,31 +1,36 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { HeartPulse, Moon, Sun } from "lucide-react";
+import { HeartPulse, LogOut, Moon, Sun } from "lucide-react";
 import { LiveSyncBadge } from "@/components/live-sync-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useIsHydrated } from "@/hooks/use-hydrated";
-import { CURRENT_USER, STAFF_ROLE_LABELS } from "@/lib/demo/reference";
+import { STAFF_ROLE_LABELS } from "@/lib/demo/reference";
+import { useCurrentUser, useSessionStore } from "@/lib/session";
 
 /**
- * AppHeader — barre applicative permanente.
+ * AppHeader — barre applicative permanente du poste de santé.
  *
  * Contient : identité du produit, signal réseau/synchronisation toujours
  * visible (UX n°1), bascule du mode coupé (pédagogie offline), bascule
- * clair/sombre, identité de l'agent connecté.
+ * clair/sombre, identité du professionnel connecté (session) et
+ * déconnexion.
  */
 export function AppHeader() {
   const { resolvedTheme, setTheme } = useTheme();
   const hydrated = useIsHydrated();
   const isDark = hydrated && resolvedTheme === "dark";
+  const user = useCurrentUser();
+  const logout = useSessionStore((s) => s.logout);
 
-  const initials = CURRENT_USER.fullName
+  const initials = user.fullName
     .split(" ")
     .map((part) => part[0])
     .slice(0, 2)
     .join("")
     .toUpperCase();
+  const roleLabel = STAFF_ROLE_LABELS[user.role];
 
   return (
     <header
@@ -69,8 +74,8 @@ export function AppHeader() {
           </Button>
           <div
             className="hidden items-center gap-2 rounded-full border border-border py-1 pl-1 pr-3 sm:flex"
-            aria-label={`Connectée : ${CURRENT_USER.fullName}, ${STAFF_ROLE_LABELS[CURRENT_USER.role]}, ${CURRENT_USER.facility}`}
-            title={`${STAFF_ROLE_LABELS[CURRENT_USER.role]} · ${CURRENT_USER.facility}`}
+            aria-label={`Connecté : ${user.fullName}, ${roleLabel}, ${user.facility}`}
+            title={`${roleLabel} · ${user.facility}`}
           >
             <Avatar className="h-7 w-7">
               <AvatarFallback className="bg-primary/10 text-[11px] font-medium text-primary">
@@ -78,9 +83,23 @@ export function AppHeader() {
               </AvatarFallback>
             </Avatar>
             <span className="max-w-28 truncate text-xs font-medium leading-tight">
-              {CURRENT_USER.fullName}
+              {user.fullName}
+            </span>
+            <span className="hidden max-w-32 truncate rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary lg:inline">
+              {roleLabel.split(" (")[0]}
             </span>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={logout}
+            title="Se déconnecter"
+            aria-label="Se déconnecter"
+          >
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </Button>
         </div>
       </div>
     </header>

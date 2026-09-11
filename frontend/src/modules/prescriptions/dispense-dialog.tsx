@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import type { DispenseLine, Prescription } from "@/lib/types";
-import { CURRENT_USER } from "@/lib/demo/reference";
+import { useCurrentUser } from "@/lib/session";
 import { remainingOf } from "./prescription-helpers";
 import { cn } from "@/lib/utils";
 
@@ -43,6 +43,7 @@ export function DispenseDialog({
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [source, setSource] = useState<"INTERNE" | "PRIVE">("INTERNE");
   const [submitting, setSubmitting] = useState(false);
+  const user = useCurrentUser();
 
   const rows = useMemo(() => {
     if (!prescription) return [];
@@ -184,7 +185,7 @@ export function DispenseDialog({
           </div>
 
           <p className="text-xs text-muted-foreground">
-            Pharmacien : <span className="font-medium">{CURRENT_USER.fullName}</span>
+            Pharmacien : <span className="font-medium">{user.fullName}</span>
           </p>
         </div>
 

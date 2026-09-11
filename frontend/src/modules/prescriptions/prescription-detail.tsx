@@ -36,7 +36,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import type { DispenseLine, Prescription } from "@/lib/types";
 import { formatDate, formatTime } from "@/lib/types";
-import { CURRENT_USER } from "@/lib/demo/reference";
+import { useCurrentUser } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -69,6 +69,7 @@ export function PrescriptionDetail({
   const { toast } = useToast();
   const dispense = useAppStore((s) => s.dispense);
   const counterEntry = useAppStore((s) => s.counterEntry);
+  const user = useCurrentUser();
 
   const [dispenseOpen, setDispenseOpen] = useState(false);
   const [counterTarget, setCounterTarget] = useState<string | null>(null);
@@ -88,7 +89,7 @@ export function PrescriptionDetail({
   ) => {
     const result = await dispense({
       prescriptionId: prescription.id,
-      pharmacist: CURRENT_USER.fullName,
+      pharmacist: user.fullName,
       source,
       lines,
     });
@@ -117,7 +118,7 @@ export function PrescriptionDetail({
     const result = await counterEntry({
       prescriptionId: prescription.id,
       dispenseId,
-      pharmacist: CURRENT_USER.fullName,
+      pharmacist: user.fullName,
     });
     if (result.status === "ok") {
       toast({

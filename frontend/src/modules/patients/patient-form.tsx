@@ -19,9 +19,10 @@ import { Loader2, Save, CloudOff, IdCard } from "lucide-react";
 import { z } from "zod";
 import type { CreatePatientInput, DuplicateCandidate, Patient } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
+import { useCurrentUser } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { uuidV7 } from "@/lib/uuid";
-import { CURRENT_USER, FACILITY_NAMES } from "@/lib/demo/reference";
+import { FACILITY_NAMES } from "@/lib/demo/reference";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -108,7 +109,7 @@ const DEFAULT_VALUES: DefaultValues<PatientFormValues> = {
   phone: "",
   identifierType: "NUNP",
   identifierValue: "",
-  facility: CURRENT_USER.facility,
+  facility: "",
   village: "",
 };
 
@@ -123,10 +124,12 @@ export function PatientFormDialog({
   const createPatient = useAppStore((s) => s.createPatient);
   const online = useAppStore((s) => s.simulatedOnline);
   const { toast } = useToast();
+  const user = useCurrentUser();
+  const defaultValues = { ...DEFAULT_VALUES, facility: user.facility };
 
   const form = useForm<PatientFormValues>({
     resolver: zodResolver(patientFormSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues,
   });
   const isSubmitting = form.formState.isSubmitting;
 
@@ -154,7 +157,7 @@ export function PatientFormDialog({
       case "created":
       case "replayed":
       case "queued":
-        form.reset(DEFAULT_VALUES);
+        form.reset(defaultValues);
         onCreated(result.patient, result.status);
         break;
       case "error":

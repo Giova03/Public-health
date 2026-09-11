@@ -32,6 +32,7 @@ import { PrescriptionsView } from "@/modules/prescriptions/view";
 import { PaymentsView } from "@/modules/payments/view";
 import { SyncView } from "@/modules/sync/view";
 import { BackofficeView } from "@/modules/backoffice/view";
+import { ROLE_VIEWS, useCurrentUser } from "@/lib/session";
 import { useAppStore } from "@/lib/store";
 import type { ViewId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -70,9 +71,6 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
 
 const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
 
-/** Barre du bas (mobile) : 4 vues principales + feuille « Plus ». */
-const MOBILE_PRIMARY: ViewId[] = ["dashboard", "patients", "prescriptions", "payments"];
-
 function viewTitle(view: ViewId): NavItem {
   return ALL_ITEMS.find((i) => i.id === view) ?? ALL_ITEMS[0];
 }
@@ -88,15 +86,17 @@ const VIEWS: Record<ViewId, React.ComponentType> = {
 };
 
 function SidebarNav({
+  groups,
   view,
   onNavigate,
 }: {
+  groups: { title: string; items: NavItem[] }[];
   view: ViewId;
   onNavigate: (id: ViewId) => void;
 }) {
   return (
     <nav aria-label="Navigation principale" className="space-y-5">
-      {NAV_GROUPS.map((group) => (
+      {groups.map((group) => (
         <div key={group.title}>
           <p className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
             {group.title}
@@ -137,17 +137,19 @@ function SidebarNav({
   );
 }
 
+/** Barre du bas (mobile) : 4 vues principales du rôle + feuille « Plus ». */
 function BottomBar({
+  items,
   view,
   onNavigate,
 }: {
+  items: NavItem[];
   view: ViewId;
   onNavigate: (id: ViewId) => void;
 }) {
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreItems = ALL_ITEMS.filter(
-    (i) => !MOBILE_PRIMARY.includes(i.id),
-  );
+  const primaryItems = items.slice(0, 4);
+  const moreItems = items.slice(4);
 
   return (
     <div
@@ -156,14 +158,13 @@ function BottomBar({
       aria-label="Navigation mobile"
     >
       <nav className="mx-auto grid max-w-lg grid-cols-5 pb-safe pt-1">
-        {MOBILE_PRIMARY.map((id) => {
-          const item = viewTitle(id);
-          const active = view === id;
+        {primaryItems.map((item) => {
+          const active = view === item.id;
           return (
             <button
-              key={id}
+              key={item.id}
               type="button"
-              onClick={() => onNavigate(id)}
+              onClick={() => onNavigate(item.id)}
               aria-current={active ? "page" : undefined}
               className={cn(
                 "flex min-h-[52px] flex-col items-center justify-center gap-1 rounded-2xl px-1 py-1.5 text-[11px] font-medium transition-all active:scale-[0.96]",
@@ -203,7 +204,7 @@ function BottomBar({
             <SheetHeader>
               <SheetTitle className="text-base">Autres modules</SheetTitle>
               <SheetDescription>
-                Consultation, synchronisation et gouvernance.
+                Modules complémentaires de votre rôle.
               </SheetDescription>
             </SheetHeader>
             <nav aria-label="Navigation secondaire" className="grid gap-2 px-4 pb-6 pt-2">
@@ -238,13 +239,26 @@ export function AppShell() {
   const hydrate = useAppStore((s) => s.hydrate);
   const hydrated = useAppStore((s) => s.hydrated);
   const syncing = useAppStore((s) => s.syncing);
+  const user = useCurrentUser();
+
+  /* Périmètre du rôle connecté : seules ces vues sont navigables. */
+  const allowed = ROLE_VIEWS[user.role] ?? ALL_ITEMS.map((i) => i.id);
+  const groups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((i) => allowed.includes(i.id)),
+  })).filter((group) => group.items.length > 0);
+  const allowedItems = groups.flatMap((group) => group.items);
+  const navigate = (id: ViewId) =>
+    goTo(allowed.includes(id) ? id : "dashboard");
 
   useEffect(() => {
     void hydrate();
   }, [hydrate]);
 
-  const CurrentView = VIEWS[view] ?? DashboardView;
-  const title = viewTitle(view);
+  const viewAllowed = allowed.includes(view);
+  const effectiveView: ViewId = viewAllowed ? view : "dashboard";
+  const CurrentView = VIEWS[effectiveView] ?? DashboardView;
+  const title = viewTitle(effectiveView);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -256,7 +270,7 @@ export function AppShell() {
           className="sticky top-[72px] hidden h-fit w-56 shrink-0 md:block"
           aria-label="Navigation de l'application"
         >
-          <SidebarNav view={view} onNavigate={goTo} />
+          <SidebarNav groups={groups} view={effectiveView} onNavigate={navigate} />
         </aside>
 
         {/* Contenu de la vue active */}
@@ -281,7 +295,7 @@ export function AppShell() {
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={view}
+              key={effectiveView}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
@@ -315,7 +329,7 @@ export function AppShell() {
       <footer className="mt-auto border-t border-border bg-card">
         <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-2 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:items-center sm:px-6">
           <p>
-            PUBLIC HEALTH v0.4 · ID / HUB / DATA · Patient d'abord · Burkina
+            PUBLIC HEALTH v0.5 · ID / HUB / DATA · Patient d'abord · Burkina
             Faso
           </p>
           <p>
@@ -324,7 +338,7 @@ export function AppShell() {
         </div>
       </footer>
 
-      <BottomBar view={view} onNavigate={goTo} />
+      <BottomBar items={allowedItems} view={effectiveView} onNavigate={navigate} />
     </div>
   );
 }

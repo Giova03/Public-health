@@ -30,7 +30,8 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
-import { CURRENT_USER, PAYMENT_CHANNELS, PAYMENT_PURPOSES } from "@/lib/demo/reference";
+import { PAYMENT_CHANNELS, PAYMENT_PURPOSES } from "@/lib/demo/reference";
+import { useCurrentUser } from "@/lib/session";
 import { useAppStore } from "@/lib/store";
 import type { PaymentChannel } from "@/lib/types";
 import { formatDate, formatXof } from "@/lib/types";
@@ -52,6 +53,7 @@ export function InitiatePaymentDialog({
   const initiatePayment = useAppStore((s) => s.initiatePayment);
   const simulatedOnline = useAppStore((s) => s.simulatedOnline);
   const { toast } = useToast();
+  const user = useCurrentUser();
 
   const [patientId, setPatientId] = useState(
     () => useAppStore.getState().selectedPatientId ?? "",
@@ -114,7 +116,7 @@ export function InitiatePaymentDialog({
       purpose: purpose.label,
       amountXof: amountValue,
       channel,
-      facility: CURRENT_USER.facility,
+      facility: user.facility,
     });
     setSubmitting(false);
 

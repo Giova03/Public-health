@@ -4,6 +4,32 @@ Application clinique de la plateforme nationale de santé du Burkina Faso.
 **Next.js 16 · TypeScript strict · Tailwind CSS 4 · shadcn/ui · Lucide ·
 framer-motion · zustand · IndexedDB (offline-first).**
 
+## Connexion & rôles (v0.5)
+
+L'application s'ouvre sur un **écran de connexion multi-profils** :
+
+- **Patient** — téléphone (+226) + code SMS à usage unique (OTP affiché en
+  démo). Il accède au **portail patient** : ses informations (MPI), ses
+  ordonnances avec l'avancement réel de la dispensation, ses paiements.
+  Comptes démo : `70123456` (Aïcha WÉDRAOGO), `66884422`, `74112233`.
+- **Professionnel de santé** — nom + rôle + structure. Le poste de santé
+  s'ouvre avec une **navigation filtrée par rôle** (`lib/session.ts`) :
+
+  | Rôle | Vues accessibles |
+  | ---- | ---------------- |
+  | Agent de saisie (MPI) | Tableau de bord, Patients, Synchronisation |
+  | Infirmier | + Consultation |
+  | Médecin | + Ordonnances |
+  | Pharmacien | Tableau de bord, Ordonnances, Synchronisation |
+  | Caissier | Tableau de bord, Patients, Paiements, Synchronisation |
+  | Superviseur | Tableau de bord, Patients, Ordonnances, Paiements, Synchronisation, Back-office |
+  | Administrateur | Toutes les vues + Back-office |
+
+La session démo vit dans `localStorage` (`ph.demo.session.v1`). En
+production, l'authentification est portée par le module sécurité du backend
+(OIDC/Keycloak, MFA pour les rôles sensibles) — seul le point d'entrée de
+session change côté front.
+
 ## Modules (backlog P0)
 
 | Module | Épique | Contenu |

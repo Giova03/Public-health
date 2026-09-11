@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIsHydrated } from "@/hooks/use-hydrated";
-import { CURRENT_USER } from "@/lib/demo/reference";
+import { ROLE_VIEWS, useCurrentUser } from "@/lib/session";
 import { useAppStore } from "@/lib/store";
 import type { ViewId } from "@/lib/types";
 import { formatTime, formatXof } from "@/lib/types";
@@ -56,6 +56,7 @@ export function DashboardView() {
   const lastSyncAt = useAppStore((s) => s.lastSyncAt);
   const syncing = useAppStore((s) => s.syncing);
   const goTo = useAppStore((s) => s.goTo);
+  const user = useCurrentUser();
   const hydrated = useIsHydrated();
 
   /* Date du jour — côté client uniquement (pas d'écart d'hydratation). */
@@ -89,7 +90,7 @@ export function DashboardView() {
         }),
       )
     : null;
-  const firstName = CURRENT_USER.fullName.split(" ")[0];
+  const firstName = user.fullName.split(" ")[0];
 
   return (
     <div className="space-y-4">
@@ -121,7 +122,7 @@ export function DashboardView() {
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/75 px-3 py-1.5 text-xs font-semibold text-ink-medical backdrop-blur">
               <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
-              {CURRENT_USER.facility}
+              {user.facility}
             </span>
           </div>
 
@@ -233,7 +234,7 @@ export function DashboardView() {
         <h2 className="px-1 text-sm font-semibold text-foreground">
           Accès rapides
         </h2>
-        <QuickAccess onNavigate={(view: ViewId) => goTo(view)} />
+        <QuickAccess onNavigate={(view: ViewId) => goTo(view)} allowed={ROLE_VIEWS[user.role]} />
       </motion.div>
     </div>
   );

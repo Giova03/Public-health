@@ -51,10 +51,21 @@ const TILES: QuickTile[] = [
   },
 ];
 
-export function QuickAccess({ onNavigate }: { onNavigate: (view: ViewId) => void }) {
+export function QuickAccess({
+  onNavigate,
+  allowed,
+}: {
+  onNavigate: (view: ViewId) => void;
+  /** Périmètre du rôle connecté (facultatif : toutes les tuiles sinon). */
+  allowed?: ViewId[];
+}) {
+  const tiles = allowed
+    ? TILES.filter((tile) => allowed.includes(tile.view))
+    : TILES;
+
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-      {TILES.map((tile, index) => (
+      {tiles.map((tile, index) => (
         <motion.button
           key={tile.view}
           type="button"

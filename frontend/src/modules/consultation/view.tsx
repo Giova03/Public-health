@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
-import { CURRENT_USER } from "@/lib/demo/reference";
+import { useCurrentUser } from "@/lib/session";
 import type { PrescriptionItem } from "@/lib/types";
 import { ConsultationStepper } from "./components/stepper";
 import { ExamStep } from "./components/exam-step";
@@ -43,6 +43,7 @@ export function ConsultationView() {
   const goTo = useAppStore((s) => s.goTo);
   const simulatedOnline = useAppStore((s) => s.simulatedOnline);
   const createPrescription = useAppStore((s) => s.createPrescription);
+  const user = useCurrentUser();
 
   const [step, setStep] = useState(0);
   const [exam, setExam] = useState<ExamDraft>(EMPTY_EXAM);
@@ -106,8 +107,8 @@ export function ConsultationView() {
     }));
     const result = await createPrescription({
       patientId: patient.id,
-      prescriber: CURRENT_USER.fullName,
-      facility: CURRENT_USER.facility,
+      prescriber: user.fullName,
+      facility: user.facility,
       diagnosis: diagnosis.trim(),
       items,
     });
@@ -167,7 +168,7 @@ export function ConsultationView() {
             Nouvelle consultation
           </CardTitle>
           <CardDescription>
-            {CURRENT_USER.facility} · {CURRENT_USER.fullName} — les trois
+            {user.facility} · {user.fullName} — les trois
             étapes restent modifiables en revenant en arrière.
           </CardDescription>
         </CardHeader>
