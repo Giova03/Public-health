@@ -15,6 +15,7 @@ import type { Variants } from "framer-motion";
 import {
   ClipboardList,
   Hourglass,
+  KeyRound,
   Lock,
   RefreshCw,
   ShieldCheck,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FacilitiesTab } from "./facilities-tab";
+import { RolesMatrixTab } from "./roles-matrix-tab";
 import { UsersTab } from "./users-tab";
 import {
   computeGovernanceStats,
@@ -176,7 +178,8 @@ export function BackofficeView() {
               Back-office — gouvernance de base
             </h1>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Comptes, structures et indicateurs de supervision (lecture seule).
+              Comptes, structures, matrice des rôles et indicateurs de
+              supervision (lecture seule).
             </p>
           </div>
         </div>
@@ -253,7 +256,7 @@ export function BackofficeView() {
           />
         </motion.div>
 
-        {/* Onglets Utilisateurs / Structures */}
+        {/* Onglets Utilisateurs / Structures / Rôles et permissions */}
         <motion.div variants={SECTION_VARIANTS}>
           <Tabs defaultValue="users">
             <TabsList className="w-full sm:w-auto">
@@ -271,6 +274,13 @@ export function BackofficeView() {
                 <ClipboardList aria-hidden="true" />
                 Structures
               </TabsTrigger>
+              <TabsTrigger
+                value="roles"
+                className="flex-1 gap-1.5 sm:flex-none"
+              >
+                <KeyRound aria-hidden="true" />
+                Rôles et permissions
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="users" className="mt-3">
               <UsersTab
@@ -287,6 +297,9 @@ export function BackofficeView() {
                 offline={!simulatedOnline}
                 error={remote.state === "error" ? remote.message : null}
               />
+            </TabsContent>
+            <TabsContent value="roles" className="mt-3">
+              <RolesMatrixTab />
             </TabsContent>
           </Tabs>
         </motion.div>

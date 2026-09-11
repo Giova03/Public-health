@@ -30,6 +30,21 @@ production, l'authentification est portée par le module sécurité du backend
 (OIDC/Keycloak, MFA pour les rôles sensibles) — seul le point d'entrée de
 session change côté front.
 
+## Matrice des rôles et permissions (v0.6)
+
+Le back-office expose un **onglet « Rôles et permissions »** : le miroir
+exact de la matrice backend (`RolesPermissions` / migration V12,
+6 rôles × 10 permissions, égalité verrouillée par `BackofficeIT`),
+l'état réel d'application (route `/api/v1/admin/**` gardée par rôle, RLS
+par propriété, append-only) et les **trois écarts** documentés par le
+rapport d'analyse RBAC (écart matrice/RLS sur les lectures croisées,
+interception par permission non câblée, périmètre structure inerte).
+Données dans `src/lib/rbac.ts` — à maintenir en miroir du backend, puis à
+servir par `GET /api/v1/admin/me/permissions` au re-câblage.
+
+> Démonstration sans sécurité réelle : la simulation front n'est pas le
+> périmètre de sécurité (garde JWT + RLS côté serveur uniquement).
+
 ## Modules (backlog P0)
 
 | Module | Épique | Contenu |
@@ -40,7 +55,7 @@ session change côté front.
 | Ordonnances | E3 | Dispensation partielle plafonnée, contre-entrées append-only |
 | Paiements | E4 FedaPay | 8 états forward-only, réconciliation |
 | Synchronisation | E2 | Outbox IndexedDB, drain idempotent (opId), delta curseur, journal |
-| Back-office | E6 | Utilisateurs, structures, rôles, MFA |
+| Back-office | E6 | Utilisateurs, structures, rôles et permissions (matrice V12), MFA |
 
 ## Design system v0.4 « Blue-Green Medical »
 

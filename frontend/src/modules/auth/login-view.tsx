@@ -581,6 +581,13 @@ export function LoginView() {
                     },
                   }))}
                 />
+                <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
+                  Démonstration : cette connexion simulée ne porte aucune
+                  sécurité réelle. En production, chaque poste s&apos;authentifie
+                  par compte personnel (JWT, MFA pour les rôles sensibles) et
+                  le serveur applique la matrice des rôles — visible dans le
+                  back-office, onglet « Rôles et permissions ».
+                </p>
                 {error && <ErrorBox message={error} />}
               </motion.div>
             )}
