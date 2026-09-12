@@ -39,39 +39,53 @@ class RolesPermissionsTest {
     }
 
     @Test
-    @DisplayName("medecin : le dossier patient et la prescription")
+    @DisplayName("medecin : clinical complet + référence + labo (V14 — fidélité I12)")
     void medecinPrescrit() {
         assertThat(RolesPermissions.permissionsDe(RoleUtilisateur.MEDECIN)).containsExactlyInAnyOrder(
                 RolesPermissions.PATIENT_LIRE,
                 RolesPermissions.PATIENT_ECRIRE,
+                RolesPermissions.CONSULTATION_LIRE,
+                RolesPermissions.CONSULTATION_ECRIRE,
                 RolesPermissions.PRESCRIPTION_LIRE,
-                RolesPermissions.PRESCRIPTION_ECRIRE);
+                RolesPermissions.PRESCRIPTION_ECRIRE,
+                RolesPermissions.RENDEZVOUS_GERER,
+                RolesPermissions.REFERENCE_GERER,
+                RolesPermissions.LABORATOIRE_ECRIRE);
     }
 
     @Test
-    @DisplayName("infirmier : admission MPI et frais d'accès (CSPS), pas de prescription")
-    void infirmierAdmetSansPrescrire() {
+    @DisplayName("infirmier/ICP : le BUNDLE complet du CSPS réel (audit I12) — "
+            + "consultation, prescription, dispensation, caisse, RDV, référence, labo")
+    void infirmierEstLeBundleCSPS() {
         Set<String> permissions = RolesPermissions.permissionsDe(RoleUtilisateur.INFIRMIER);
         assertThat(permissions).contains(
                 RolesPermissions.PATIENT_LIRE,
                 RolesPermissions.PATIENT_ECRIRE,
-                RolesPermissions.PAIEMENT_INITIER);
-        assertThat(permissions).doesNotContain(
+                RolesPermissions.PAIEMENT_INITIER,
+                RolesPermissions.CONSULTATION_LIRE,
+                RolesPermissions.CONSULTATION_ECRIRE,
+                RolesPermissions.PRESCRIPTION_LIRE,
                 RolesPermissions.PRESCRIPTION_ECRIRE,
-                RolesPermissions.DISPENSER);
+                RolesPermissions.DISPENSER,
+                RolesPermissions.RENDEZVOUS_GERER,
+                RolesPermissions.REFERENCE_GERER,
+                RolesPermissions.LABORATOIRE_ECRIRE);
+        // L'ICP ne fait pas de réconciliation comptable ni de back-office.
+        assertThat(permissions).doesNotContain(
+                RolesPermissions.PAIEMENT_RECONCILIER,
+                RolesPermissions.ADMIN_GERER,
+                RolesPermissions.STOCK_GERER);
     }
 
     @Test
-    @DisplayName("pharmacien : la dispensation, jamais la prescription")
+    @DisplayName("pharmacien : dispensation adossée au stock (I8), jamais la prescription")
     void pharmacienDispenseSansPrescrire() {
         Set<String> permissions = RolesPermissions.permissionsDe(RoleUtilisateur.PHARMACIEN);
-        assertThat(permissions).contains(
+        assertThat(permissions).containsExactlyInAnyOrder(
                 RolesPermissions.DISPENSER,
                 RolesPermissions.PRESCRIPTION_LIRE,
-                RolesPermissions.PATIENT_LIRE);
-        assertThat(permissions).doesNotContain(
-                RolesPermissions.PRESCRIPTION_ECRIRE,
-                RolesPermissions.PATIENT_ECRIRE);
+                RolesPermissions.PATIENT_LIRE,
+                RolesPermissions.STOCK_GERER);
     }
 
     @Test
@@ -86,17 +100,20 @@ class RolesPermissionsTest {
     }
 
     @Test
-    @DisplayName("superviseur : lecture seule (paiements, audit) — AUCUNE écriture")
+    @DisplayName("superviseur : lecture (clinical, paiements, audit, références) — AUCUNE écriture de soin")
     void superviseurEstLectureSeule() {
         Set<String> permissions = RolesPermissions.permissionsDe(RoleUtilisateur.SUPERVISEUR);
         assertThat(permissions).contains(
                 RolesPermissions.AUDIT_LIRE,
                 RolesPermissions.PAIEMENT_LIRE,
-                RolesPermissions.PRESCRIPTION_LIRE);
+                RolesPermissions.PRESCRIPTION_LIRE,
+                RolesPermissions.CONSULTATION_LIRE,
+                RolesPermissions.REFERENCE_GERER);
         assertThat(permissions).doesNotContain(
                 RolesPermissions.ADMIN_GERER,
                 RolesPermissions.PATIENT_ECRIRE,
                 RolesPermissions.PRESCRIPTION_ECRIRE,
+                RolesPermissions.CONSULTATION_ECRIRE,
                 RolesPermissions.DISPENSER,
                 RolesPermissions.PAIEMENT_INITIER,
                 RolesPermissions.PAIEMENT_RECONCILIER);
@@ -117,16 +134,25 @@ class RolesPermissionsTest {
     }
 
     @Test
+    @DisplayName("agent_saisie (V14) : admission MPI uniquement — le registre, rien d'autre")
+    void agentSaisieAdmet() {
+        assertThat(RolesPermissions.permissionsDe(RoleUtilisateur.AGENT_SAISIE))
+                .containsExactlyInAnyOrder(
+                        RolesPermissions.PATIENT_LIRE,
+                        RolesPermissions.PATIENT_ECRIRE);
+    }
+
+    @Test
     @DisplayName("aucune permission orpheline : la nomenclature est exactement l'union des rôles")
     void aucunePermissionOrpheline() {
         Set<String> accordees = RolesPermissions.permissionsAccordees();
         assertThat(accordees).isEqualTo(RolesPermissions.TOUTES_LES_PERMISSIONS);
-        // La nomenclature est CLOSE : dix permissions, pas une de plus.
-        assertThat(RolesPermissions.TOUTES_LES_PERMISSIONS).hasSize(10);
+        // La nomenclature est CLOSE : seize permissions, pas une de plus (V14).
+        assertThat(RolesPermissions.TOUTES_LES_PERMISSIONS).hasSize(16);
     }
 
     @Test
-    @DisplayName("la matrice couvre les six rôles, chacun non vide")
+    @DisplayName("la matrice couvre les sept rôles (V14), chacun non vide")
     void matriceComplete() {
         assertThat(RolesPermissions.matrice()).containsOnlyKeys(RoleUtilisateur.values());
         for (RoleUtilisateur role : RoleUtilisateur.values()) {

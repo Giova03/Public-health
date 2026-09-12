@@ -277,12 +277,28 @@ public class PatientService {
         if (patient.getMasterId() != null) {
             throw new PatientMergedException(patient.getId(), patient.getMasterId());
         }
+        // I16 — les lectures sont AUDITÉES : qui a consulté quel dossier.
+        audit(acteurCourant(), "PATIENT_READ", "patient", patient.getId(),
+                null, "lecture du dossier", AuditEntryEntity.Result.SUCCESS, null);
         return charger(patient);
     }
 
     @Transactional(readOnly = true)
     public List<PatientAggregate> search(String family, String given, String phone,
                                          LocalDate birthDate, int limite) {
+        List<PatientAggregate> resultats = rechercher(family, given, phone, birthDate, limite);
+        if (!resultats.isEmpty()) {
+            // I16 — recherche audité (compteur, pas chaque ligne : la chaîne
+            // d'audit reste légère pour la recherche miroir).
+            audit(acteurCourant(), "PATIENT_SEARCH", "patient", null,
+                    null, "recherche miroir", AuditEntryEntity.Result.SUCCESS,
+                    Map.of("resultats", resultats.size()));
+        }
+        return resultats;
+    }
+
+    private List<PatientAggregate> rechercher(String family, String given, String phone,
+                                              LocalDate birthDate, int limite) {
         Set<UUID> ids = new LinkedHashSet<>();
         if (phone != null && !phone.isBlank()) {
             telecomRepository.findByValue(phone.strip())
@@ -451,6 +467,49 @@ public class PatientService {
     @Transactional(readOnly = true)
     public List<MergeLogEntity> journalDesFusions() {
         return mergeLogRepository.findAllByOrderByPerformedAtDesc();
+    }
+
+    // ------------------------------------------------------------------
+    // Décès (V14, I15) — déclaration motivée, dossier scellé
+    // ------------------------------------------------------------------
+
+    /**
+     * Déclare le décès : deceased=true, date, cause — le dossier est
+     * scellé (plus aucune consultation ni RDV possible, vérifié par les
+     * services concernés), l'entrée d'audit est PATIENT_DEATH.
+     */
+    @Transactional
+    public PatientAggregate declarerDeces(UUID id, Instant dateDeces, String cause, UUID acteur) {
+        PatientEntity patient = patientRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Patient introuvable : " + id));
+        if (patient.getMasterId() != null) {
+            throw new PatientMergedException(patient.getId(), patient.getMasterId());
+        }
+        if (patient.isDeceased()) {
+            throw new IllegalStateException("Décès déjà déclaré le " + patient.getDeceasedAt());
+        }
+        patient.declarerDeces(dateDeces == null ? Instant.now() : dateDeces, cause);
+        patientRepository.save(patient);
+        audit(acteur == null ? acteurCourant() : acteur, "PATIENT_DEATH", "patient", id,
+                null, cause, AuditEntryEntity.Result.SUCCESS,
+                Map.of("deceasedAt", String.valueOf(patient.getDeceasedAt())));
+        return charger(patient);
+    }
+
+    /** Acteur courant — sub du JWT, ou null en posture Sprint 0 (tests). */
+    private static UUID acteurCourant() {
+        var authentification = org.springframework.security.core.context.SecurityContextHolder
+                .getContext().getAuthentication();
+        if (authentification instanceof org.springframework.security.oauth2.server.resource
+                .authentication.JwtAuthenticationToken jeton
+                && jeton.getToken().getSubject() != null) {
+            try {
+                return UUID.fromString(jeton.getToken().getSubject());
+            } catch (IllegalArgumentException ignore) {
+                return null;
+            }
+        }
+        return null;
     }
 
     private void audit(UUID actor, String action, String entity, UUID entityId,

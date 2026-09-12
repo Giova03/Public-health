@@ -679,7 +679,7 @@ class BackofficeIT {
                 .andExpect(jsonPath("$.role").value("admin"))
                 .andExpect(jsonPath("$.status").value("actif"))
                 .andExpect(jsonPath("$.supabaseUserId").value(SENTINELLE.toString()))
-                .andExpect(jsonPath("$.permissions", hasSize(10)))
+                .andExpect(jsonPath("$.permissions", hasSize(16)))
                 .andExpect(jsonPath("$.permissions", hasItem("admin:gerer")))
                 .andExpect(jsonPath("$.permissions", hasItem("paiement:reconcilier")));
 

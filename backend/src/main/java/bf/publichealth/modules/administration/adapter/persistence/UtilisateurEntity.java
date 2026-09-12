@@ -64,6 +64,10 @@ public class UtilisateurEntity {
     @Column(name = "invited_by")
     private UUID invitedBy;
 
+    /** Hash BCrypt — auth interne V14 (I3). NULL = compte non initialisé. */
+    @Column(name = "mot_de_passe_hash")
+    private String motDePasseHash;
+
     @Column(name = "last_login_at")
     private Instant lastLoginAt;
 
@@ -122,6 +126,16 @@ public class UtilisateurEntity {
         this.mfaActive = active;
     }
 
+    /** Définit le hash de mot de passe (auth interne V14 — posé par l'invitation ou le seed démo). */
+    public void definirMotDePasse(String hash) {
+        this.motDePasseHash = hash;
+    }
+
+    /** Consigne la date de dernière connexion (auth interne V14). */
+    public void setLastLoginAt(Instant instant) {
+        this.lastLoginAt = instant;
+    }
+
     @PreUpdate
     void avantMiseAJour() {
         this.updatedAt = Instant.now();
@@ -165,6 +179,10 @@ public class UtilisateurEntity {
 
     public UUID getInvitedBy() {
         return invitedBy;
+    }
+
+    public String getMotDePasseHash() {
+        return motDePasseHash;
     }
 
     public Instant getLastLoginAt() {

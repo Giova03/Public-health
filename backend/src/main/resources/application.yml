@@ -40,3 +40,21 @@ fedapay:
   webhook-secret: ${FEDAPAY_WEBHOOK_SECRET:dev-secret-change-me}
   webhook-signature-header: X-FedaPay-Signature
   event-id-header: X-Event-Id
+
+# Sécurité — SÛRE PAR DÉFAUT depuis V14 (audit I1) : l'API exige un JWT.
+# La chaîne d'émission vit dans /api/v1/auth (HS256, secret ci-dessous).
+# Les tests unitaires/d'intégration posent securite.jwt.actif=false via
+# src/test/resources/application.yml (posture Sprint 0 inchangée pour
+# la suite existante ; JwtSecuriteIT et AuthRbacIT la réactivent).
+securite:
+  jwt:
+    actif: ${SECURITE_JWT_ACTIF:true}
+    secret: ${SECURITE_JWT_SECRET:dev-interne-public-health-secret-32-caracteres-minimum}
+  ratelimit:
+    actif: ${SECURITE_RATELIMIT_ACTIF:true}
+
+# Posture démo : les codes OTP/MFA sont RENVOYÉS dans les réponses
+# (aucune passerelle SMS livrée). À false en production — le module
+# notification (P2) prendra le relais.
+auth:
+  demo-otp-visible: ${AUTH_DEMO_OTP_VISIBLE:true}

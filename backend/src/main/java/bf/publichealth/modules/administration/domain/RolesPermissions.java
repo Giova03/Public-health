@@ -43,20 +43,28 @@ public final class RolesPermissions {
 
     public static final String PATIENT_LIRE = "patient:lire";
     public static final String PATIENT_ECRIRE = "patient:ecrire";
+    public static final String CONSULTATION_LIRE = "consultation:lire";
+    public static final String CONSULTATION_ECRIRE = "consultation:ecrire";
     public static final String PRESCRIPTION_LIRE = "prescription:lire";
     public static final String PRESCRIPTION_ECRIRE = "prescription:ecrire";
     public static final String DISPENSER = "dispenser";
     public static final String PAIEMENT_INITIER = "paiement:initier";
     public static final String PAIEMENT_LIRE = "paiement:lire";
     public static final String PAIEMENT_RECONCILIER = "paiement:reconcilier";
+    public static final String STOCK_GERER = "stock:gerer";
+    public static final String RENDEZVOUS_GERER = "rendezvous:gerer";
+    public static final String REFERENCE_GERER = "reference:gerer";
+    public static final String LABORATOIRE_ECRIRE = "laboratoire:ecrire";
     public static final String AUDIT_LIRE = "audit:lire";
     public static final String ADMIN_GERER = "admin:gerer";
 
     /** Toutes les permissions de la nomenclature — close, testée sans orpheline. */
     public static final Set<String> TOUTES_LES_PERMISSIONS = Set.of(
             PATIENT_LIRE, PATIENT_ECRIRE,
+            CONSULTATION_LIRE, CONSULTATION_ECRIRE,
             PRESCRIPTION_LIRE, PRESCRIPTION_ECRIRE, DISPENSER,
             PAIEMENT_INITIER, PAIEMENT_LIRE, PAIEMENT_RECONCILIER,
+            STOCK_GERER, RENDEZVOUS_GERER, REFERENCE_GERER, LABORATOIRE_ECRIRE,
             AUDIT_LIRE, ADMIN_GERER);
 
     // ------------------------------------------------------------------
@@ -68,33 +76,50 @@ public final class RolesPermissions {
     private static Map<RoleUtilisateur, Set<String>> construireMatrice() {
         Map<RoleUtilisateur, Set<String>> matrice = new LinkedHashMap<>();
 
-        // admin : tout le back-office + supervision globale.
+        // admin : tout (16/16) — back-office + supervision globale.
         matrice.put(RoleUtilisateur.ADMIN, Set.of(
                 PATIENT_LIRE, PATIENT_ECRIRE,
+                CONSULTATION_LIRE, CONSULTATION_ECRIRE,
                 PRESCRIPTION_LIRE, PRESCRIPTION_ECRIRE, DISPENSER,
                 PAIEMENT_INITIER, PAIEMENT_LIRE, PAIEMENT_RECONCILIER,
+                STOCK_GERER, RENDEZVOUS_GERER, REFERENCE_GERER, LABORATOIRE_ECRIRE,
                 AUDIT_LIRE, ADMIN_GERER));
 
-        // medecin : dossier patient + prescription.
+        // medecin : clinical complet + référence + labo (V14).
         matrice.put(RoleUtilisateur.MEDECIN, Set.of(
                 PATIENT_LIRE, PATIENT_ECRIRE,
-                PRESCRIPTION_LIRE, PRESCRIPTION_ECRIRE));
+                CONSULTATION_LIRE, CONSULTATION_ECRIRE,
+                PRESCRIPTION_LIRE, PRESCRIPTION_ECRIRE,
+                RENDEZVOUS_GERER, REFERENCE_GERER, LABORATOIRE_ECRIRE));
 
-        // infirmier : admission MPI + frais d'accès au comptoir (CSPS).
+        // infirmier/ICP : le BUNDLE COMPLET du CSPS réel (audit I12) —
+        // admission, consultation, prescription, dispensation, caisse,
+        // rendez-vous, référence, laboratoire. Au CSPS, l'ICP fait tout.
         matrice.put(RoleUtilisateur.INFIRMIER, Set.of(
-                PATIENT_LIRE, PATIENT_ECRIRE, PAIEMENT_INITIER));
+                PATIENT_LIRE, PATIENT_ECRIRE,
+                CONSULTATION_LIRE, CONSULTATION_ECRIRE,
+                PRESCRIPTION_LIRE, PRESCRIPTION_ECRIRE, DISPENSER,
+                PAIEMENT_INITIER,
+                RENDEZVOUS_GERER, REFERENCE_GERER, LABORATOIRE_ECRIRE));
 
-        // pharmacien : dispensation.
+        // pharmacien : dispensation adossée au stock (I8).
         matrice.put(RoleUtilisateur.PHARMACIEN, Set.of(
-                PATIENT_LIRE, PRESCRIPTION_LIRE, DISPENSER));
+                PATIENT_LIRE, PRESCRIPTION_LIRE, DISPENSER, STOCK_GERER));
 
-        // agent_financier : paiements et facturation.
+        // agent_financier : caisse — ticket d'accès, exonérations, encaissements.
         matrice.put(RoleUtilisateur.AGENT_FINANCIER, Set.of(
                 PATIENT_LIRE, PAIEMENT_INITIER, PAIEMENT_LIRE));
 
-        // superviseur : supervision en lecture (paiements, audit).
+        // superviseur : supervision en lecture — clinical, paiements, audit,
+        // références (le tableau des non-abouties), et les statistiques SNIS
+        // (mêmes droits que audit:lire sur /api/v1/statistiques).
         matrice.put(RoleUtilisateur.SUPERVISEUR, Set.of(
-                PATIENT_LIRE, PRESCRIPTION_LIRE, PAIEMENT_LIRE, AUDIT_LIRE));
+                PATIENT_LIRE, CONSULTATION_LIRE, PRESCRIPTION_LIRE,
+                PAIEMENT_LIRE, REFERENCE_GERER, AUDIT_LIRE));
+
+        // agent_saisie (V14) : admission MPI uniquement.
+        matrice.put(RoleUtilisateur.AGENT_SAISIE, Set.of(
+                PATIENT_LIRE, PATIENT_ECRIRE));
 
         return Collections.unmodifiableMap(matrice);
     }

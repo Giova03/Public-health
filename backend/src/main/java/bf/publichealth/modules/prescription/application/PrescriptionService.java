@@ -80,17 +80,20 @@ public class PrescriptionService {
     private final DispensationRepository dispensationRepository;
     private final PatientLookup patientLookup;
     private final AuditRecorder auditRecorder;
+    private final bf.publichealth.modules.pharmacie.application.StockService stockService;
 
     public PrescriptionService(PrescriptionRepository prescriptionRepository,
                                PrescriptionItemRepository itemRepository,
                                DispensationRepository dispensationRepository,
                                PatientLookup patientLookup,
-                               AuditRecorder auditRecorder) {
+                               AuditRecorder auditRecorder,
+                               bf.publichealth.modules.pharmacie.application.StockService stockService) {
         this.prescriptionRepository = prescriptionRepository;
         this.itemRepository = itemRepository;
         this.dispensationRepository = dispensationRepository;
         this.patientLookup = patientLookup;
         this.auditRecorder = auditRecorder;
+        this.stockService = stockService;
     }
 
     // ------------------------------------------------------------------
@@ -295,7 +298,14 @@ public class PrescriptionService {
             throw e;
         }
 
-        // 3. Le fait accompli : insertion append-only, cumul mis à jour.
+        // 3. Stock (V14, I8) : si une ligne de stock existe pour ce
+        //    médicament dans cette structure, la disponibilité est VÉRIFIÉE
+        //    AVANT le fait accompli — rupture → rollback total (409).
+        stockService.consommerPourDispensation(prescription.getFacilityId(),
+                ligne.getMedicationCode(), ligne.getMedicationLabel(), quantite,
+                prescriptionId, dispensedBy);
+
+        // 4. Le fait accompli : insertion append-only, cumul mis à jour.
         DispensationEntity dispensation = dispensationRepository.save(
                 new DispensationEntity(UuidV7.next(), prescriptionId, ligneId, quantite,
                         dispensedBy, clientRequestId));

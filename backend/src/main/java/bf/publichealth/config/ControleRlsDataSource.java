@@ -83,12 +83,21 @@ public class ControleRlsDataSource extends DelegatingDataSource {
         }
     }
 
-    /** Proxy JDK : intercepte close() pour réinitialiser les GUC avant le retour au pool. */
+    /** Proxy JDK : intercepte close() pour réinitialiser les GUC AVANT le retour au pool. */
     private static Connection connexionProxy(Connection delegate) {
         InvocationHandler gestionnaire = (proxy, methode, arguments) -> {
             if ("close".equals(methode.getName())) {
-                reinitialiserGuc(delegate, "app.user_id");
-                reinitialiserGuc(delegate, "app.roles");
+                // BUG CORRIGÉ (V14, révélé par AuthRbacIT) : la réinitialisation
+                // des GUC est nécessaire MAIS PAS SUFFISANTE — il faut AUSSI
+                // rendre la connexion au pool (delegate.close()). Sans cela,
+                // chaque requête authentifiée fuyait une connexion : le pool
+                // (10) s'épuisait après 10 requêtes et tout passait en 500.
+                try {
+                    reinitialiserGuc(delegate, "app.user_id");
+                    reinitialiserGuc(delegate, "app.roles");
+                } finally {
+                    delegate.close();
+                }
                 return null;
             }
             if ("equals".equals(methode.getName())) {

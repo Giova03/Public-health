@@ -19,7 +19,9 @@ public enum RoleUtilisateur {
     INFIRMIER("infirmier"),
     PHARMACIEN("pharmacien"),
     AGENT_FINANCIER("agent_financier"),
-    SUPERVISEUR("superviseur");
+    SUPERVISEUR("superviseur"),
+    /** Rôle ajouté par V14 (audit I2/I12) : admission MPI uniquement. */
+    AGENT_SAISIE("agent_saisie");
 
     private final String code;
 
@@ -27,7 +29,7 @@ public enum RoleUtilisateur {
         this.code = code;
     }
 
-    /** Valeur persistée en base (migration V12) et portée par le JWT. */
+    /** Valeur persistée en base (migrations V12/V14) et portée par le JWT. */
     public String getCode() {
         return code;
     }
@@ -40,6 +42,10 @@ public enum RoleUtilisateur {
             }
         }
         throw new IllegalArgumentException(
-                "Rôle inconnu : " + code + " (admin, medecin, infirmier, pharmacien, agent_financier, superviseur)");
+                "Rôle inconnu : " + code + " (admin, medecin, infirmier, pharmacien, agent_financier, "
+                        + "superviseur, agent_saisie)");
     }
+
+    /** Rôle patient — n'est PAS un RoleUtilisateur : jeton autoporteur patient_id. */
+    public static final String ROLE_PATIENT = "patient";
 }

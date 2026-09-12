@@ -334,7 +334,7 @@ class JwtSecuriteIT {
         String sujet = UUID.randomUUID().toString();
         UUID patientId = UUID.randomUUID();
         String corps = mockMvc.perform(post("/api/v1/audit/break-the-glass")
-                        .header("Authorization", "Bearer " + jetonValide(sujet, "soignant"))
+                        .header("Authorization", "Bearer " + jetonValide(sujet, "medecin"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"patientId\":\"%s\",\"reason\":\"Urgence vitale, contexte authentifié\"}"
                                 .formatted(patientId)))

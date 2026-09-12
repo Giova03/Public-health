@@ -78,6 +78,39 @@ public class PatientController {
         }
     }
 
+    /**
+     * Déclaration de décès (V14, I15) — permission consultation:ecrire
+     * (FiltrePermissions). Le dossier est scellé : plus aucune consultation
+     * ni RDV possible ; la cause alimente le rapport de mortalité SNIS.
+     */
+    @PostMapping("/patients/{id}/deces")
+    public ResponseEntity<?> declarerDeces(
+            @PathVariable UUID id,
+            @Valid @RequestBody DeclarationDecesRequest requete) {
+        try {
+            var patient = patientService.declarerDeces(
+                    id, requete.dateDeces(), requete.cause(), null);
+            return ResponseEntity.ok(PatientDtos.PatientResponse.from(patient));
+        } catch (IllegalArgumentException e) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.NOT_FOUND, e.getMessage());
+            problem.setTitle("Patient introuvable");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(problem);
+        } catch (IllegalStateException e) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.CONFLICT, e.getMessage());
+            problem.setTitle("Décès déjà déclaré");
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
+        }
+    }
+
+    /** Corps de la déclaration de décès. */
+    public record DeclarationDecesRequest(
+            java.time.Instant dateDeces,
+            @jakarta.validation.constraints.NotBlank(message = "La cause du décès est obligatoire")
+            String cause) {
+    }
+
     /** Recherche miroir — mêmes critères que la détection à la création. */
     @GetMapping("/patients")
     public ResponseEntity<List<PatientDtos.PatientResponse>> search(

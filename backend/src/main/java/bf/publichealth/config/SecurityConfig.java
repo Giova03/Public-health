@@ -157,7 +157,10 @@ public class SecurityConfig {
                 // X-Content-Type-Options: nosniff — à ne JAMAIS désactiver.
                 .authorizeHttpRequests(auth -> {
                     if (jwtActif) {
-                        auth.requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                        auth.requestMatchers("/api/v1/auth/**").permitAll()
+                                // Webhook FedaPay : intégrité HMAC, PAS de jeton (P0).
+                                .requestMatchers("/api/v1/webhooks/fedapay").permitAll()
+                                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                                 // Uplink machine /api/v1/sync : couvert par /api/v1/** —
                                 // les clients machine portent un jeton de service (P0).
                                 .requestMatchers("/api/v1/**", "/fhir/**").authenticated()

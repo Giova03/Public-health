@@ -46,6 +46,10 @@ public class PatientEntity {
     @Column(name = "deceased_at")
     private Instant deceasedAt;
 
+    /** Cause du décès (V14 — alimente le rapport de mortalité SNIS). */
+    @Column(name = "cause_deces")
+    private String causeDeces;
+
     /** Non NULL : ce dossier est fusionné dans ce maître (irréversible). */
     @Column(name = "master_id")
     private UUID masterId;
@@ -116,6 +120,26 @@ public class PatientEntity {
 
     public UUID getMasterId() {
         return masterId;
+    }
+
+    public boolean isDeceased() {
+        return deceased;
+    }
+
+    public Instant getDeceasedAt() {
+        return deceasedAt;
+    }
+
+    public String getCauseDeces() {
+        return causeDeces;
+    }
+
+    /** Déclaration de décès (V14, I15) : scelle le dossier — irréversible. */
+    public void declarerDeces(Instant dateDeces, String cause) {
+        this.deceased = true;
+        this.deceasedAt = dateDeces;
+        this.causeDeces = cause;
+        this.updatedAt = Instant.now();
     }
 
     public long getVersion() {

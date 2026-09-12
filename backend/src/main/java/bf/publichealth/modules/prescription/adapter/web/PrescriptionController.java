@@ -108,19 +108,30 @@ public class PrescriptionController {
 
     /**
      * Dispensation partielle d'une ligne : 201 ; rejeu idempotent = 200.
-     * Dépassement → 409 {restant, demande} ; prescription inactive → 409.
+     * Dépassement → 409 {restant, demande} ; prescription inactive → 409 ;
+     * RUPTURE DE STOCK (V14, I8) → 409 {disponible} — la pharmacie ne
+     * dispenser plus ce qui n'existe pas.
      */
     @PostMapping("/{id}/items/{itemId}/dispense")
-    public ResponseEntity<PrescriptionDtos.DispenseResponse> dispenser(
+    public ResponseEntity<?> dispenser(
             @PathVariable UUID id,
             @PathVariable UUID itemId,
             @Valid @RequestBody PrescriptionDtos.DispenseRequest request) {
 
-        PrescriptionService.DispensationResultat resultat = prescriptionService.dispenser(
-                id, itemId, request.quantity(), request.clientRequestId(), request.dispensedBy());
-
-        return ResponseEntity
-                .status(resultat.rejouee() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(PrescriptionDtos.DispenseResponse.from(resultat));
+        try {
+            PrescriptionService.DispensationResultat resultat = prescriptionService.dispenser(
+                    id, itemId, request.quantity(), request.clientRequestId(), request.dispensedBy());
+            return ResponseEntity
+                    .status(resultat.rejouee() ? HttpStatus.OK : HttpStatus.CREATED)
+                    .body(PrescriptionDtos.DispenseResponse.from(resultat));
+        } catch (bf.publichealth.modules.pharmacie.application.StockService.RuptureStockException e) {
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                    e.getMessage());
+            problem.setTitle("Rupture de stock");
+            problem.setProperty("disponible", e.getDisponible());
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+                    .body(problem);
+        }
     }
 }

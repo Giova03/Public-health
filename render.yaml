@@ -24,6 +24,16 @@ services:
         value: staging
       - key: FEDAPAY_WEBHOOK_SECRET
         sync: false
+      # Sécurité V14 (audit I1) : JWT ACTIF par défaut — un secret dédié
+      # est EXIGÉ (généré une fois, > 32 caractères, jamais commité).
+      - key: SECURITE_JWT_ACTIF
+        value: "true"
+      - key: SECURITE_JWT_SECRET
+        sync: false
+      # En production : les codes OTP/MFA ne sont plus renvoyés dans les
+      # réponses — le module notification (P2) prendra le relais.
+      - key: AUTH_DEMO_OTP_VISIBLE
+        value: "false"
       - key: APP_ORIGINES
         value: https://public-health.vercel.app
 
