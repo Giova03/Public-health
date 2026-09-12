@@ -13,7 +13,9 @@ import { ExamStep } from "./components/exam-step";
 import { LinesEditor } from "./components/prescription-lines";
 import { PatientStep } from "./components/patient-step";
 import {
+  DIAGNOSIS_CODES,
   EMPTY_EXAM,
+  OTHER_DIAGNOSIS,
   type DraftLine,
   type ExamDraft,
   dosageFromForm,
@@ -43,6 +45,7 @@ export function ConsultationView() {
   const goTo = useAppStore((s) => s.goTo);
   const simulatedOnline = useAppStore((s) => s.simulatedOnline);
   const createPrescription = useAppStore((s) => s.createPrescription);
+  const createConsultation = useAppStore((s) => s.createConsultation);
   const user = useCurrentUser();
 
   const [step, setStep] = useState(0);
@@ -56,6 +59,11 @@ export function ConsultationView() {
   );
 
   const diagnosis = resolvedDiagnosis(exam);
+  /** Code du référentiel (I14) — l'étiquette seule ne suffit plus. */
+  const diagnosticCode = () =>
+    exam.diagnosisChoice === OTHER_DIAGNOSIS
+      ? "AUTRE"
+      : (DIAGNOSIS_CODES[exam.diagnosisChoice] ?? "AUTRE");
   const linesValid =
     lines.length > 0 &&
     lines.every((l) => l.drug !== "" && l.quantity >= 1 && l.durationDays >= 1);
@@ -98,6 +106,34 @@ export function ConsultationView() {
   const submit = async () => {
     if (!patient || !linesValid) return;
     setSubmitting(true);
+
+    // V14 (I4) : l'ACTE CLINIQUE est PERSISTÉ EN ENTIER — motif,
+    // constantes (TA, T°, poids), notes et diagnostic codé. Le registre
+    // papier du CSPS ne contient plus rien que la plateforme ignore.
+    const ta = exam.bloodPressure?.split(/[\s/]/).map((x) => Number(x.replace(",", ".")));
+    const consultResult = await createConsultation({
+      patientId: patient.id,
+      motif: exam.motif.trim(),
+      diagnosticCode: diagnosticCode(),
+      diagnosticLabel: diagnosis.trim(),
+      notes: exam.notes.trim() || undefined,
+      constantes: {
+        taSystolique: ta && ta.length >= 2 && !Number.isNaN(ta[0]) ? ta[0] : undefined,
+        taDiastolique: ta && ta.length >= 2 && !Number.isNaN(ta[1]) ? ta[1] : undefined,
+        temperatureC: exam.temperature ? Number(exam.temperature.replace(",", ".")) : undefined,
+        poidsKg: exam.weight ? Number(exam.weight.replace(",", ".")) : undefined,
+      },
+    });
+    if (consultResult.status !== "ok") {
+      setSubmitting(false);
+      toast({
+        title: "Consultation refusée",
+        description: "message" in consultResult ? consultResult.message : "Erreur",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const items: PrescriptionItem[] = lines.map((l) => ({
       drug: l.drug,
       dosage: l.dosage || drugByDci(l.drug)?.form || "",
@@ -117,7 +153,7 @@ export function ConsultationView() {
     if (result.status === "ok") {
       toast({
         title: "Consultation validée",
-        description: `Ordonnance enregistrée pour ${patient.name.family} ${patient.name.given}.`,
+        description: `Acte clinique ET ordonnance enregistrés pour ${patient.name.family} ${patient.name.given}.`,
       });
       reset();
       goTo("prescriptions");

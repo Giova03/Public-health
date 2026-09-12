@@ -4,12 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission } from "@/lib/demo/guard";
 import type { Prescription, PrescriptionItem } from "@/lib/types";
 import { addPrescription, applyDelta, findPatient, getState, newEntityId } from "@/lib/demo/seed";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const garde = exigerPermission(request, "prescription:lire");
+  if (garde.refus) return garde.refus;
   const params = request.nextUrl.searchParams;
   const patientId = params.get("patientId");
   const status = params.get("status");
@@ -38,6 +41,8 @@ interface CreateBody {
 }
 
 export async function POST(request: NextRequest) {
+  const garde = exigerPermission(request, "prescription:ecrire");
+  if (garde.refus) return garde.refus;
   let body: CreateBody;
   try {
     body = (await request.json()) as CreateBody;

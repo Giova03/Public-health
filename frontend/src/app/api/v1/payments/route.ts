@@ -4,12 +4,15 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission } from "@/lib/demo/guard";
 import type { PaymentRecord } from "@/lib/types";
 import { applyDelta, findPatient, getState, newEntityId } from "@/lib/demo/seed";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  const garde = exigerPermission(request, "paiement:lire");
+  if (garde.refus) return garde.refus;
   const params = request.nextUrl.searchParams;
   const patientId = params.get("patientId");
   const state = params.get("state");
@@ -39,6 +42,9 @@ interface InitiateBody {
 }
 
 export async function POST(request: NextRequest) {
+  // V14 (I2) : initiation — agent financier, infirmier ICP (caisse CSPS), admin.
+  const garde = exigerPermission(request, "paiement:initier");
+  if (garde.refus) return garde.refus;
   let body: InitiateBody;
   try {
     body = (await request.json()) as InitiateBody;

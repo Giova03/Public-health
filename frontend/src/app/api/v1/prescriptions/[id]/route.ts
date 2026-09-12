@@ -10,8 +10,9 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission, exigerPermissionParmi } from "@/lib/demo/guard";
 import type { DispenseLine } from "@/lib/types";
-import { addDispense, applyDelta, findPrescription, newEntityId } from "@/lib/demo/seed";
+import { addDispense, applyDelta, findPrescription, getState, newEntityId } from "@/lib/demo/seed";
 
 export const dynamic = "force-dynamic";
 
@@ -30,9 +31,12 @@ function netDispensed(prescriptionId: string): Map<string, number> {
 }
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // V14 (I2) : dispensation et lecture gardées par permission.
+  const gardeLecture = exigerPermission(request, "prescription:lire");
+  if (gardeLecture.refus) return gardeLecture.refus;
   const { id } = await params;
   const prescription = findPrescription(id);
   if (!prescription) {
@@ -48,7 +52,10 @@ export async function GET(
 }
 
 interface DispenseBody {
-  action: "DISPENSE" | "COUNTER_ENTRY";
+  action: "DISPENSE" | "COUNTER_ENTRY" | "STATUS_CHANGE";
+  /** Annulation logistique / erreur de saisie (motif OBLIGATOIRE). */
+  status?: "CANCELLED" | "ENTERED_IN_ERROR";
+  motif?: string;
   pharmacist: string;
   source?: "INTERNE" | "PRIVE";
   lines: DispenseLine[];
@@ -60,6 +67,11 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  // V14 (I2) : dispenser (comptoir) ou prescription:ecrire (annulation).
+  // La permission fine est re-testée après lecture du corps ; pour la
+  // lecture fine on teste dispenser OU prescription:ecrire.
+  const garde = exigerPermissionParmi(request, ["dispenser", "prescription:ecrire"]);
+  if (garde.refus) return garde.refus;
   const { id } = await params;
   const prescription = findPrescription(id);
   if (!prescription) {
@@ -68,6 +80,105 @@ export async function POST(
       { status: 404 },
     );
   }
+  // V14 (I8) : RUPTURE DE STOCK — si une ligne de stock existe pour ce
+  // médicament dans la structure, la disponibilité est VÉRIFIÉE avant le
+  // fait accompli. Insuffisant → 409, rien n'est débité.
+  // (Le corps est lu UNE fois ici : le garde de stock précède le reste.)
+  let body: DispenseBody;
+  try {
+    body = (await request.json()) as DispenseBody;
+  } catch {
+    return NextResponse.json({ title: "Corps de requête invalide", status: 400 }, { status: 400 });
+  }
+  // V14 : annulation logistique (CANCELLED) / contre-entrée d'erreur de
+  // saisie (ENTERED_IN_ERROR) — motif OBLIGATOIRE, jamais de réécriture.
+  if (body?.action === "STATUS_CHANGE") {
+    const cible = body.status;
+    if ((cible !== "CANCELLED" && cible !== "ENTERED_IN_ERROR") || !body.motif?.trim()) {
+      return NextResponse.json(
+        {
+          title: "Transition refusée",
+          detail: "Annulation : statut CANCELLED/ENTERED_IN_ERROR et motif obligatoires",
+          status: 409,
+        },
+        { status: 409 },
+      );
+    }
+    if (prescription.status !== "ACTIVE") {
+      return NextResponse.json(
+        { title: "Transition refusée", detail: "Seule une ordonnance ACTIVE peut être annulée", status: 409 },
+        { status: 409 },
+      );
+    }
+    prescription.status = cible;
+    const state0 = getState();
+    state0.auditLog.unshift({
+      date: new Date().toISOString(),
+      acteur: garde.token.sub,
+      action: cible === "CANCELLED" ? "PRESCRIPTION_CANCELLED" : "PRESCRIPTION_ENTERED_IN_ERROR",
+      entite: "prescription",
+      entiteId: prescription.id,
+      motif: body.motif.trim(),
+      resultat: "SUCCESS",
+    });
+    return NextResponse.json({ prescription, netDispensed: [] });
+  }
+
+  if (body?.action === "DISPENSE") {
+    const state = getState();
+    for (const line of body.lines) {
+      const stock = state.stockItems.find(
+        (i) => i.structure === prescription.facility && i.medicationCode === line.drug,
+      );
+      if (stock && stock.quantity < line.quantity) {
+        state.auditLog.unshift({
+          date: new Date().toISOString(),
+          acteur: garde.token.sub,
+          action: "DISPENSATION_DENIED",
+          entite: "stock",
+          entiteId: stock.id,
+          motif: `RUPTURE_STOCK ${line.drug} : disponible ${stock.quantity}, demandé ${line.quantity}`,
+          resultat: "DENIED",
+        });
+        return NextResponse.json(
+          {
+            title: "Rupture de stock",
+            detail: `Rupture de stock : ${stock.medicationLabel} — disponible ${stock.quantity}, demandé ${line.quantity}`,
+            status: 409,
+          },
+          { status: 409 },
+        );
+      }
+    }
+    for (const line of body.lines) {
+      const stock = state.stockItems.find(
+        (i) => i.structure === prescription.facility && i.medicationCode === line.drug,
+      );
+      if (stock) {
+        stock.quantity -= line.quantity;
+        state.stockMouvements.unshift({
+          id: `m-${Date.now().toString(36)}`,
+          medicationCode: line.drug,
+          type: "dispensation",
+          quantity: line.quantity,
+          motif: `dispensation ${prescription.id}`,
+          date: new Date().toISOString(),
+        });
+        if (stock.quantity <= stock.seuilAlerte) {
+          state.auditLog.unshift({
+            date: new Date().toISOString(),
+            acteur: garde.token.sub,
+            action: "STOCK_ALERTE_SEUIL",
+            entite: "stock",
+            entiteId: stock.id,
+            motif: `${stock.medicationLabel} sous le seuil (${stock.quantity})`,
+            resultat: "SUCCESS",
+          });
+        }
+      }
+    }
+  }
+
   if (prescription.status === "CANCELLED") {
     return NextResponse.json(
       { title: "Ordonnance annulée — dispensation impossible", status: 409 },
@@ -75,15 +186,6 @@ export async function POST(
     );
   }
 
-  let body: DispenseBody;
-  try {
-    body = (await request.json()) as DispenseBody;
-  } catch {
-    return NextResponse.json(
-      { title: "Corps de requête invalide", status: 400 },
-      { status: 400 },
-    );
-  }
   if (!body.pharmacist || !Array.isArray(body.lines) || body.lines.length === 0) {
     return NextResponse.json(
       { title: "Pharmacien et lignes obligatoires", status: 422 },

@@ -27,6 +27,11 @@ import {
   roleHasPermission,
   type BackendRoleCode,
 } from "@/lib/rbac";
+
+/** Code front du rôle back (nomenclatures alignées V14 : casse seule). */
+function backendCodeFixe(role: string): import("@/lib/types").StaffRole {
+  return role.toUpperCase() as import("@/lib/types").StaffRole;
+}
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -116,7 +121,7 @@ export function RolesMatrixTab() {
                     </TableCell>
                     {BACKEND_ROLES.map((role) => {
                       const granted = roleHasPermission(
-                        role.code as BackendRoleCode,
+                        backendCodeFixe(role.code),
                         permission.code,
                       );
                       return (

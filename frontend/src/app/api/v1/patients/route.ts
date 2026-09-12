@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission } from "@/lib/demo/guard";
 import type { ConflictPatientBody, CreatePatientInput, Patient } from "@/lib/types";
 import { findDuplicates, normalize } from "@/lib/demo/matcher";
 import {
@@ -18,6 +19,9 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // V14 (I1/I2) : l'API n'est plus un registre ouvert — jeton + permission.
+  const garde = exigerPermission(request, "patient:lire");
+  if (garde.refus) return garde.refus;
   const params = request.nextUrl.searchParams;
   const q = normalize(params.get("q") ?? "");
   const family = normalize(params.get("family") ?? "");
@@ -50,6 +54,8 @@ interface CreateBody extends CreatePatientInput {
 }
 
 export async function POST(request: NextRequest) {
+  const garde = exigerPermission(request, "patient:ecrire");
+  if (garde.refus) return garde.refus;
   let body: CreateBody;
   try {
     body = (await request.json()) as CreateBody;

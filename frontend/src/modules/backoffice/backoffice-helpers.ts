@@ -33,7 +33,7 @@ export const ROLE_BADGE_CLASS: Record<StaffRole, string> = {
   INFIRMIER: "border-primary/30 bg-primary/10 text-primary",
   MEDECIN: "border-primary/30 bg-primary/10 text-primary",
   PHARMACIEN: "border-primary/30 bg-primary/10 text-primary",
-  CAISSIER:
+  AGENT_FINANCIER:
     "border-amber-600/30 bg-amber-500/10 text-amber-600 dark:border-amber-400/30 dark:text-amber-400",
   SUPERVISEUR: "border-border bg-muted/60 text-muted-foreground",
   ADMIN: "border-destructive/30 bg-destructive/5 text-destructive",

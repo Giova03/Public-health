@@ -11,6 +11,14 @@
 
 import { create } from "zustand";
 import type {
+  AppointmentRecord,
+  AuditEntryView,
+  ConsultationConstantes,
+  ConsultationRecord,
+  ReferenceFiche,
+  SnisStats,
+  StockItem,
+  StockMouvement,
   CreatePatientInput,
   DispenseLine,
   DuplicateCandidate,
@@ -26,6 +34,21 @@ import type {
 } from "@/lib/types";
 import { uuidV7 } from "@/lib/uuid";
 import * as db from "@/lib/offline/db";
+import {
+  createAppointment as apiCreateAppointment,
+  createConsultation as apiCreateConsultation,
+  createReference as apiCreateReference,
+  createStockMouvement as apiCreateStockMouvement,
+  declareDeath as apiDeclareDeath,
+  getSnis as apiGetSnis,
+  getStock as apiGetStock,
+  listAppointments as apiListAppointments,
+  listAuditEntries as apiListAudit,
+  listConsultations as apiListConsultations,
+  listReferences as apiListReferences,
+  transitionAppointment as apiTransitionAppointment,
+  transitionReference as apiTransitionReference,
+} from "@/lib/api-client";
 import {
   ApiError,
   NetworkError,
@@ -75,6 +98,14 @@ interface AppState {
   payments: PaymentRecord[];
   users: StaffUser[];
   facilities: HealthFacility[];
+  /* V14 — correction audit de fidélité */
+  consultations: ConsultationRecord[];
+  appointments: AppointmentRecord[];
+  stockItems: StockItem[];
+  stockMouvements: StockMouvement[];
+  references: ReferenceFiche[];
+  auditEntries: AuditEntryView[];
+  snis: SnisStats | null;
 
   /* Outbox & protocole E2 */
   outbox: SyncOperation[];
@@ -124,6 +155,57 @@ interface AppState {
     target: PaymentRecord["state"],
   ) => Promise<MutationResult>;
   runReconciliation: () => Promise<MutationResult>;
+
+  /* V14 — actions fidélité */
+  createConsultation: (payload: {
+    patientId: string;
+    motif: string;
+    diagnosticCode: string;
+    diagnosticLabel?: string;
+    notes?: string;
+    constantes?: ConsultationConstantes;
+  }) => Promise<MutationResult>;
+  loadConsultations: (patientId: string) => Promise<void>;
+  createAppointment: (payload: {
+    patientId?: string;
+    type?: AppointmentRecord["type"];
+    creneau: string;
+    motif?: string;
+  }) => Promise<MutationResult>;
+  transitionAppointment: (
+    id: string,
+    action: "confirmer" | "honorer" | "absent" | "annuler",
+    motif?: string,
+  ) => Promise<MutationResult>;
+  loadAppointments: (patientId?: string) => Promise<void>;
+  loadStock: () => Promise<void>;
+  createStockMouvement: (payload: {
+    medicationCode: string;
+    medicationLabel?: string;
+    type: "reception" | "ajustement";
+    quantity: number;
+    motif?: string;
+  }) => Promise<MutationResult>;
+  loadReferences: () => Promise<void>;
+  createReference: (payload: {
+    patientId: string;
+    structureDestination: string;
+    motif: string;
+    urgence?: boolean;
+  }) => Promise<MutationResult>;
+  transitionReference: (
+    id: string,
+    action: "reception" | "hospitalisation" | "contre-reference",
+    resume?: string,
+  ) => Promise<MutationResult>;
+  loadSnis: () => Promise<void>;
+  loadAudit: () => Promise<void>;
+  declareDeath: (patientId: string, cause: string) => Promise<MutationResult>;
+  cancelPrescription: (
+    id: string,
+    kind: "CANCELLED" | "ENTERED_IN_ERROR",
+    motif: string,
+  ) => Promise<MutationResult>;
 }
 
 /* --------------------------- Helpers internes ------------------------- */
@@ -185,6 +267,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   patients: [],
   prescriptions: [],
   payments: [],
+  consultations: [],
+  appointments: [],
+  stockItems: [],
+  stockMouvements: [],
+  references: [],
+  auditEntries: [],
+  snis: null,
   users: [],
   facilities: [],
 
@@ -813,6 +902,220 @@ export const useAppStore = create<AppState>((set, get) => ({
             ok: true,
           },
         ]),
+      }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  /* ------------------------------------------------------------------ */
+  /* V14 — actions de fidélité (audit I1-I16)                            */
+  /* ------------------------------------------------------------------ */
+
+  createConsultation: async (payload) => {
+    if (!get().isOnline()) {
+      return { status: "error", message: "La consultation se rédige en ligne (synchro des actes : P0.6)." };
+    }
+    try {
+      const consultation = await apiCreateConsultation(payload);
+      set((s) => ({ consultations: [consultation, ...s.consultations] }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  loadConsultations: async (patientId) => {
+    if (!get().isOnline()) return;
+    try {
+      const consultations = await apiListConsultations(patientId);
+      set((s) => ({
+        consultations: [
+          ...consultations,
+          ...s.consultations.filter((c) => c.patientId !== patientId),
+        ],
+      }));
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  createAppointment: async (payload) => {
+    if (!get().isOnline()) {
+      return { status: "error", message: "La demande de rendez-vous nécessite le réseau." };
+    }
+    try {
+      const rdv = await apiCreateAppointment(payload);
+      set((s) => ({ appointments: [rdv, ...s.appointments] }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  transitionAppointment: async (id, action, motif) => {
+    try {
+      const rdv = await apiTransitionAppointment(id, action, motif);
+      set((s) => ({
+        appointments: s.appointments.map((r) => (r.id === id ? rdv : r)),
+      }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  loadAppointments: async (patientId) => {
+    if (!get().isOnline()) return;
+    try {
+      const appointments = await apiListAppointments(patientId);
+      set((s) => ({ appointments }));
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  loadStock: async () => {
+    if (!get().isOnline()) return;
+    try {
+      const etat = await apiGetStock();
+      set((s) => ({
+        stockItems: etat.items,
+        stockMouvements: etat.mouvements,
+      }));
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  createStockMouvement: async (payload) => {
+    try {
+      const item = await apiCreateStockMouvement(payload);
+      set((s) => ({
+        stockItems: s.stockItems.map((i) => (i.id === item.id ? item : i)),
+      }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  loadReferences: async () => {
+    if (!get().isOnline()) return;
+    try {
+      const references = await apiListReferences();
+      set((s) => ({ references }));
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  createReference: async (payload) => {
+    try {
+      const fiche = await apiCreateReference(payload);
+      set((s) => ({ references: [fiche, ...s.references] }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  transitionReference: async (id, action, resume) => {
+    try {
+      const fiche = await apiTransitionReference(id, action, resume);
+      set((s) => ({ references: s.references.map((r) => (r.id === id ? fiche : r)) }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  loadSnis: async () => {
+    if (!get().isOnline()) return;
+    try {
+      const snis = await apiGetSnis();
+      set({ snis });
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  loadAudit: async () => {
+    if (!get().isOnline()) return;
+    try {
+      const auditEntries = await apiListAudit(150);
+      set({ auditEntries });
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  declareDeath: async (patientId, cause) => {
+    try {
+      await apiDeclareDeath(patientId, cause);
+      set((s) => ({
+        patients: s.patients.map((p) =>
+          p.id === patientId
+            ? { ...p, deceased: true, deceasedAt: new Date().toISOString(), causeDeces: cause }
+            : p,
+        ),
+      }));
+      return { status: "ok" };
+    } catch (error) {
+      return {
+        status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  cancelPrescription: async (id, kind, motif) => {
+    try {
+      // L'annulation logistique / l'erreur de saisie passent par le même
+      // contrat que la dispensation : le statut + le motif.
+      await fetch(`/api/v1/prescriptions/${id}`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(typeof window !== "undefined" &&
+            window.localStorage.getItem("ph.session.v2")
+            ? {
+                authorization: `Bearer ${(JSON.parse(window.localStorage.getItem("ph.session.v2")!) as { jeton: string }).jeton}`,
+              }
+            : {}),
+        },
+        body: JSON.stringify({
+          action: "STATUS_CHANGE",
+          status: kind,
+          motif,
+        }),
+      });
+      set((s) => ({
+        prescriptions: s.prescriptions.map((r) =>
+          r.id === id ? { ...r, status: kind } : r,
+        ),
       }));
       return { status: "ok" };
     } catch (error) {

@@ -29,7 +29,12 @@ export type ViewId =
   | "prescriptions"
   | "payments"
   | "sync"
-  | "backoffice";
+  | "backoffice"
+  | "appointments"
+  | "stock"
+  | "references"
+  | "statistics"
+  | "audit";
 
 /* ------------------------------------------------------------------ */
 /* E1 — Identité & MPI                                                */
@@ -70,6 +75,10 @@ export interface Patient {
   /** Faux dossier fusionné : false + masterId renvoyé (HTTP 410). */
   active: boolean;
   masterId?: string;
+  /** V14 (I15) : décès déclaré — le dossier est scellé. */
+  deceased?: boolean;
+  deceasedAt?: string;
+  causeDeces?: string;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -156,7 +165,7 @@ export interface SyncLogEntry {
 /* E3 — Ordonnances & dispensation                                    */
 /* ------------------------------------------------------------------ */
 
-export type PrescriptionStatus = "ACTIVE" | "COMPLETED" | "CANCELLED";
+export type PrescriptionStatus = "ACTIVE" | "COMPLETED" | "CANCELLED" | "ENTERED_IN_ERROR";
 
 export interface PrescriptionItem {
   /** Médicament de la liste nationale (DCI). */
@@ -254,7 +263,7 @@ export type StaffRole =
   | "INFIRMIER"
   | "MEDECIN"
   | "PHARMACIEN"
-  | "CAISSIER"
+  | "AGENT_FINANCIER"
   | "SUPERVISEUR"
   | "ADMIN";
 
@@ -263,6 +272,8 @@ export interface StaffUser {
   fullName: string;
   role: StaffRole;
   facility: string;
+  /** Compte de connexion (V14 : l'auth est RÉELLE, BCrypt côté back). */
+  email?: string;
   mfaEnabled: boolean;
   active: boolean;
   lastSeenAt: string;
@@ -305,3 +316,123 @@ export function formatTime(iso: string): string {
     minute: "2-digit",
   });
 }
+
+/* ------------------------------------------------------------------ */
+/* V14 — Correction audit de fidélité : consultation, RDV, labo,      */
+/* stock, référence, statistiques SNIS, audit                          */
+/* ------------------------------------------------------------------ */
+
+/** Constantes vitales d'une consultation (I4 : désormais PERSISTÉES). */
+export interface ConsultationConstantes {
+  taSystolique?: number;
+  taDiastolique?: number;
+  temperatureC?: number;
+  poidsKg?: number;
+}
+
+/** Consultation complète — l'acte clinique n'est plus réduit à l'ordonnance. */
+export interface ConsultationRecord {
+  id: string;
+  patientId: string;
+  facility: string;
+  practitioner: string;
+  motif: string;
+  diagnosticCode: string;
+  diagnosticLabel: string;
+  notes?: string;
+  constantes: ConsultationConstantes;
+  /** Examens de laboratoire liés (TDR…) — la preuve derrière le diagnostic. */
+  examens: { id: string; type: string; statut: string; resultat?: string; positif?: boolean }[];
+  date: string;
+  pendingSync?: boolean;
+}
+
+/** Rendez-vous — machine à états demande→confirme→honoré/annulé/absent. */
+export type AppointmentStatus = "demande" | "confirme" | "honore" | "annule" | "absent";
+export type AppointmentType = "general" | "cpn" | "vaccination" | "controle" | "suivi";
+
+export interface AppointmentRecord {
+  id: string;
+  patientId: string;
+  patientName?: PatientName;
+  structure: string;
+  type: AppointmentType;
+  creneau: string; // ISO
+  statut: AppointmentStatus;
+  motif?: string;
+  demandePar: "patient" | "agent";
+  motifAnnulation?: string;
+  createdAt: string;
+}
+
+/** Ligne de stock (I8) — la dispensation décrémente, la rupture est visible. */
+export interface StockItem {
+  id: string;
+  structure: string;
+  medicationCode: string;
+  medicationLabel: string;
+  quantity: number;
+  seuilAlerte: number;
+}
+
+export type StockMouvementType = "reception" | "dispensation" | "contre_entree" | "ajustement";
+
+export interface StockMouvement {
+  id: string;
+  medicationCode: string;
+  type: StockMouvementType;
+  quantity: number;
+  motif?: string;
+  date: string;
+}
+
+/** Référence / contre-référence (I7) — la pyramide sanitaire tracée. */
+export type ReferenceStatus = "envoyee" | "recue" | "hospitalisee" | "retournee" | "cloturee";
+
+export interface ReferenceFiche {
+  id: string;
+  patientId: string;
+  patientName?: PatientName;
+  structureOrigine: string;
+  structureDestination: string;
+  motif: string;
+  urgence: boolean;
+  statut: ReferenceStatus;
+  contreReference?: string;
+  createdAt: string;
+  recueLe?: string;
+}
+
+/** Entrée du journal d'audit (I16) — la chaîne existait, l'écran manquait. */
+export interface AuditEntryView {
+  date: string;
+  acteur: string;
+  action: string;
+  entite: string;
+  entiteId?: string;
+  motif?: string;
+  resultat: string;
+}
+
+/** Statistiques SNIS mensuelles (I11) — la donnée remonte. */
+export interface SnisStats {
+  periode: string;
+  consultations: { total: number; moinsDe5: number; de5a14: number; femmes15a49: number };
+  paludismeConfirme: number;
+  diagnostics: { code: string; total: number }[];
+  ordonnances: number;
+  dispensations: number;
+  paiements: { inities: number; encaisseXof: number; echecs: number };
+  references: { envoyees: number; nonAbouties48h: number };
+  rendezVous: { demandes: number; honores: number; annules: number };
+  deces: number;
+  rupturesStock: number;
+}
+
+/** Exonération (I5) : la caisse réelle du BF — indigents, < 5 ans, césariennes. */
+export type ExonerationKind =
+  | "AUCUNE"
+  | "INDIGENT_ATTESTE"
+  | "ENFANT_MOINS_5_ANS"
+  | "CESARIENNE"
+  | "GROSSESSE_SUIVIE";

@@ -4,11 +4,16 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Activity,
+  ArrowRightLeft,
+  BarChart3,
+  CalendarDays,
   ChevronRight,
   ClipboardList,
   CreditCard,
+  FileClock,
   LayoutDashboard,
   MoreHorizontal,
+  Package,
   RefreshCw,
   Settings2,
   Stethoscope,
@@ -32,6 +37,11 @@ import { PrescriptionsView } from "@/modules/prescriptions/view";
 import { PaymentsView } from "@/modules/payments/view";
 import { SyncView } from "@/modules/sync/view";
 import { BackofficeView } from "@/modules/backoffice/view";
+import { AppointmentsView } from "@/modules/appointments/view";
+import { StockView } from "@/modules/stock/view";
+import { ReferencesView } from "@/modules/references/view";
+import { StatisticsView } from "@/modules/statistics/view";
+import { AuditView } from "@/modules/audit/view";
 import { ROLE_VIEWS, useCurrentUser } from "@/lib/session";
 import { useAppStore } from "@/lib/store";
 import type { ViewId } from "@/lib/types";
@@ -52,18 +62,28 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
       { id: "patients", label: "Patients", icon: Users, description: "MPI : recherche, création, doublons" },
       { id: "consultation", label: "Consultation", icon: Stethoscope, description: "Examen clinique et ordonnance" },
       { id: "prescriptions", label: "Ordonnances", icon: ClipboardList, description: "Dispensation partielle, contre-entrées" },
+      { id: "appointments", label: "Rendez-vous", icon: CalendarDays, description: "Demandes, confirmations, convocations" },
     ],
   },
   {
-    title: "Finances",
+    title: "Pharmacie & finances",
     items: [
       { id: "payments", label: "Paiements", icon: CreditCard, description: "FedaPay : 8 états, réconciliation" },
+      { id: "stock", label: "Stock pharmacie", icon: Package, description: "Solde, ruptures, réceptions COCOM" },
+    ],
+  },
+  {
+    title: "Filière de soins",
+    items: [
+      { id: "references", label: "Références", icon: ArrowRightLeft, description: "CSPS ↔ CHU : la boucle tracée" },
     ],
   },
   {
     title: "Système",
     items: [
       { id: "sync", label: "Synchronisation", icon: RefreshCw, description: "Outbox, delta, journal" },
+      { id: "statistics", label: "Statistiques SNIS", icon: BarChart3, description: "Agrégats mensuels, export" },
+      { id: "audit", label: "Journal d'audit", icon: FileClock, description: "Qui a fait quoi — chaîne scellée" },
       { id: "backoffice", label: "Back-office", icon: Settings2, description: "Utilisateurs, structures, rôles" },
     ],
   },
@@ -83,6 +103,11 @@ const VIEWS: Record<ViewId, React.ComponentType> = {
   payments: PaymentsView,
   sync: SyncView,
   backoffice: BackofficeView,
+  appointments: AppointmentsView,
+  stock: StockView,
+  references: ReferencesView,
+  statistics: StatisticsView,
+  audit: AuditView,
 };
 
 function SidebarNav({

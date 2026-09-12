@@ -36,6 +36,19 @@ import type {
   SyncOperation,
 } from "@/lib/types";
 
+/** Jeton de session (localStorage — évite la dépendance circulaire store). */
+function jetonSession(): string | null {
+  try {
+    const raw = typeof window !== "undefined"
+      ? window.localStorage.getItem("ph.session.v2")
+      : null;
+    if (!raw) return null;
+    return (JSON.parse(raw) as { jeton?: string }).jeton ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export class NetworkError extends Error {
   constructor(message = "Réseau indisponible") {
     super(message);
@@ -65,11 +78,18 @@ async function request<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
+  // V14 (I1) : chaque appel porte le jeton de session (Authorization:
+  // Bearer) — l'API exige une authentification depuis le correctif I1.
+  const jeton = jetonSession();
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
       ...init,
-      headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        "content-type": "application/json",
+        ...(jeton ? { authorization: `Bearer ${jeton}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch (cause) {
     throw new NetworkError(cause instanceof Error ? cause.message : undefined);
@@ -267,4 +287,136 @@ export function getBackoffice(): Promise<{
   serverBoot: string;
 }> {
   return request("/backoffice");
+}
+
+/* -------------------------------------------------------------------- */
+/* V14 — Consultation, RDV, stock, référence, SNIS, audit, décès        */
+/* -------------------------------------------------------------------- */
+
+import type {
+  AppointmentRecord,
+  AuditEntryView,
+  ConsultationConstantes,
+  ConsultationRecord,
+  ReferenceFiche,
+  SnisStats,
+  StockItem,
+  StockMouvement,
+} from "@/lib/types";
+
+/** L'ACTE CLINIQUE COMPLET (I4) : motif + constantes + notes + diagnostic codé. */
+export async function createConsultation(body: {
+  patientId: string;
+  motif: string;
+  diagnosticCode: string;
+  diagnosticLabel?: string;
+  notes?: string;
+  constantes?: ConsultationConstantes;
+}): Promise<ConsultationRecord> {
+  return request<ConsultationRecord>("/consultations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function listConsultations(patientId: string): Promise<ConsultationRecord[]> {
+  const reponse = await request<{ consultations: ConsultationRecord[] }>(
+    `/consultations?patientId=${encodeURIComponent(patientId)}`,
+  );
+  return reponse.consultations;
+}
+
+export async function listAppointments(patientId?: string): Promise<AppointmentRecord[]> {
+  const reponse = await request<{ appointments: AppointmentRecord[] }>(
+    `/appointments${patientId ? `?patientId=${encodeURIComponent(patientId)}` : ""}`,
+  );
+  return reponse.appointments;
+}
+
+export async function createAppointment(body: {
+  patientId?: string;
+  type?: AppointmentRecord["type"];
+  creneau: string;
+  motif?: string;
+}): Promise<AppointmentRecord> {
+  return request<AppointmentRecord>("/appointments", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function transitionAppointment(
+  id: string,
+  action: "confirmer" | "honorer" | "absent" | "annuler",
+  motif?: string,
+): Promise<AppointmentRecord> {
+  return request<AppointmentRecord>(`/appointments/${id}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ motif }),
+  });
+}
+
+export async function getStock(structureId?: string): Promise<{
+  items: StockItem[];
+  mouvements: StockMouvement[];
+  ruptures: number;
+  sousSeuil: number;
+}> {
+  return request(`/stock${structureId ? `?structureId=${encodeURIComponent(structureId)}` : ""}`);
+}
+
+export async function createStockMouvement(body: {
+  structureId?: string;
+  medicationCode: string;
+  medicationLabel?: string;
+  type: "reception" | "ajustement";
+  quantity: number;
+  motif?: string;
+}): Promise<StockItem> {
+  return request<StockItem>("/stock", { method: "POST", body: JSON.stringify(body) });
+}
+
+export async function listReferences(): Promise<ReferenceFiche[]> {
+  const reponse = await request<{ references: ReferenceFiche[] }>("/references");
+  return reponse.references;
+}
+
+export async function createReference(body: {
+  patientId: string;
+  structureDestination: string;
+  motif: string;
+  urgence?: boolean;
+}): Promise<ReferenceFiche> {
+  return request<ReferenceFiche>("/references", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function transitionReference(
+  id: string,
+  action: "reception" | "hospitalisation" | "contre-reference",
+  resume?: string,
+): Promise<ReferenceFiche> {
+  return request<ReferenceFiche>(`/references/${id}/${action}`, {
+    method: "POST",
+    body: JSON.stringify({ resume }),
+  });
+}
+
+export async function getSnis(structureId?: string): Promise<SnisStats> {
+  return request(`/statistics/snis${structureId ? `?structureId=${encodeURIComponent(structureId)}` : ""}`);
+}
+
+export async function listAuditEntries(limit = 100): Promise<AuditEntryView[]> {
+  const reponse = await request<{ entries: AuditEntryView[] }>(`/audit/entries?limit=${limit}`);
+  return reponse.entries;
+}
+
+/** Déclaration de décès (I15) — le dossier est scellé. */
+export async function declareDeath(patientId: string, cause: string): Promise<void> {
+  await request(`/patients/${patientId}/deces`, {
+    method: "POST",
+    body: JSON.stringify({ cause }),
+  });
 }

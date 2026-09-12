@@ -91,6 +91,21 @@ export function makeLine(): DraftLine {
 
 export const OTHER_DIAGNOSIS = "__autre__";
 
+/**
+ * V14 (I14) : chaque diagnostic du référentiel porte un CODE — le texte
+ * libre ne suffit plus, l'agrégation SNIS exige des codes stables.
+ */
+export const DIAGNOSIS_CODES: Record<string, string> = {
+  "Paludisme simple": "B50",
+  "Paludisme grave": "B54",
+  "Infection respiratoire aiguë": "J06",
+  "Diarrhée aiguë": "A09",
+  "Hypertension artérielle": "I10",
+  "Diabète type 2": "E11",
+  "Anémie ferriprive": "D50",
+  "Plaie simple": "S01",
+};
+
 export interface ExamDraft {
   motif: string;
   /** Valeur du Select : diagnostic du référentiel ou OTHER_DIAGNOSIS. */

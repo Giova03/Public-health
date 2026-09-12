@@ -39,6 +39,7 @@ import { formatDate, formatTime } from "@/lib/types";
 import { useCurrentUser } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { DispenseDialog } from "./dispense-dialog";
 import {
@@ -69,6 +70,8 @@ export function PrescriptionDetail({
   const { toast } = useToast();
   const dispense = useAppStore((s) => s.dispense);
   const counterEntry = useAppStore((s) => s.counterEntry);
+  const cancelPrescription = useAppStore((s) => s.cancelPrescription);
+  const peutAnnuler = usePermission("prescription:ecrire");
   const user = useCurrentUser();
 
   const [dispenseOpen, setDispenseOpen] = useState(false);
@@ -256,15 +259,49 @@ export function PrescriptionDetail({
             </ul>
           </div>
 
-          <Button
-            variant="medical"
-            className="h-11 w-full sm:w-auto"
-            onClick={() => setDispenseOpen(true)}
-            disabled={prescription.status !== "ACTIVE" || !hasRemaining}
-          >
-            <Package className="h-4 w-4" aria-hidden="true" />
-            Dispenser
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="medical"
+              className="h-11 w-full sm:w-auto"
+              onClick={() => setDispenseOpen(true)}
+              disabled={prescription.status !== "ACTIVE" || !hasRemaining}
+            >
+              <Package className="h-4 w-4" aria-hidden="true" />
+              Dispenser
+            </Button>
+            {peutAnnuler && prescription.status === "ACTIVE" && (
+              <>
+                <Button
+                  variant="outline"
+                  className="h-11 rounded-full"
+                  onClick={async () => {
+                    const motif = window.prompt("Motif d'annulation logistique (OBLIGATOIRE) :");
+                    if (!motif?.trim()) return;
+                    const r = await cancelPrescription(prescription.id, "CANCELLED", motif.trim());
+                    if (r.status !== "ok") {
+                      toast({ title: "Annulation refusée", description: "message" in r ? r.message : "Erreur", variant: "destructive" });
+                    }
+                  }}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="h-11 rounded-full text-destructive"
+                  onClick={async () => {
+                    const motif = window.prompt("Contre-entrée d'erreur de saisie — motif (OBLIGATOIRE) :");
+                    if (!motif?.trim()) return;
+                    const r = await cancelPrescription(prescription.id, "ENTERED_IN_ERROR", motif.trim());
+                    if (r.status !== "ok") {
+                      toast({ title: "Refusé", description: "message" in r ? r.message : "Erreur", variant: "destructive" });
+                    }
+                  }}
+                >
+                  Erreur de saisie
+                </Button>
+              </>
+            )}
+          </div>
 
           <Separator />
 

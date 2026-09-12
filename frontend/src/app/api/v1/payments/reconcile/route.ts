@@ -4,12 +4,15 @@
  * pour revue. Renvoie le nombre de paiements réconciliés.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission } from "@/lib/demo/guard";
 import { getState, runNightlyReconciliation } from "@/lib/demo/seed";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const garde = exigerPermission(request, "paiement:reconcilier");
+  if (garde.refus) return garde.refus;
   const count = runNightlyReconciliation();
   const orphans = getState().payments.filter(
     (m) =>

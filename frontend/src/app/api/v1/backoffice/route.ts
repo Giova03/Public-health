@@ -3,12 +3,16 @@
  * utilisateurs, structures, indicateurs de supervision.
  */
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { exigerPermissionParmi } from "@/lib/demo/guard";
 import { getState } from "@/lib/demo/seed";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // V14 : le back-office n'est plus anonyme — superviseur (audit:lire) ou admin.
+  const garde = exigerPermissionParmi(request, ["admin:gerer", "audit:lire"]);
+  if (garde.refus) return garde.refus;
   const s = getState();
   const activePatients = s.patients.filter((p) => p.active).length;
   const activePrescriptions = s.prescriptions.filter((r) => r.status === "ACTIVE").length;

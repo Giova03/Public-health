@@ -13,6 +13,7 @@ export const STATUS_LABELS: Record<Prescription["status"], string> = {
   ACTIVE: "En cours",
   COMPLETED: "Soldée",
   CANCELLED: "Annulée",
+  ENTERED_IN_ERROR: "Erreur de saisie",
 };
 
 export const STATUS_BADGE_CLASS: Record<Prescription["status"], string> = {
@@ -21,6 +22,7 @@ export const STATUS_BADGE_CLASS: Record<Prescription["status"], string> = {
   COMPLETED:
     "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   CANCELLED: "border-destructive/30 bg-destructive/10 text-destructive",
+  ENTERED_IN_ERROR: "border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
 /** Avancement global : part des quantités prescrites déjà dispensées (net). */

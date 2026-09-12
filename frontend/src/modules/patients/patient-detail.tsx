@@ -33,6 +33,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ageLabel, avatarTone, fullName, initials } from "./patient-utils";
 import { AgeBadge, GenderBadge, PendingSyncBadge, RefSyncBadge } from "./patient-badges";
 import { PatientHistory } from "./patient-history";
+import { ConsultationHistory } from "./consultation-history";
 
 export function PatientDetail({ patientId }: { patientId: string }) {
   const patient = useAppStore((s) => s.patients.find((p) => p.id === patientId));
@@ -260,6 +261,9 @@ export function PatientDetail({ patientId }: { patientId: string }) {
           Initier un paiement
         </Button>
       </div>
+
+      {/* V14 : historique CLINIQUE (consultations persistées, I4) */}
+      <ConsultationHistory patient={patient} />
 
       {/* Historique ordonnances / paiements */}
       <PatientHistory patientId={patient.id} />

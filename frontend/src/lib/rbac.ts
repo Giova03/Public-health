@@ -1,20 +1,20 @@
 /**
- * PUBLIC HEALTH — matrice RBAC de référence (miroir front du backend).
+ * PUBLIC HEALTH — matrice RBAC V14 (miroir front du backend).
  *
- * Source de vérité : `RolesPermissions.java` (domaine pur, épique E6) et
- * la migration V12 qui sème `administration.role_permission` à l'identique
- * — l'égalité table/domaine est verrouillée par BackofficeIT. Ce fichier
- * est le miroir côté front : si la matrice backend évolue, ce fichier doit
- * suivre (le jour du re-câblage sur l'API réelle, il sera servi par
- * `GET /api/v1/admin/me/permissions`).
+ * Source de vérité : `RolesPermissions.java` (domaine pur) et la migration
+ * V14 qui sème `administration.role_permission` à l'identique — l'égalité
+ * table/domaine est verrouillée par BackofficeIT. Ce fichier est le miroir
+ * côté front.
  *
- * L'état d'application (« déclarée » vs « appliquée ») est documenté ici
- * aussi honnêtement que dans le rapport d'analyse RBAC : la matrice est
- * déclarée et exposée, les gardes réelles aujourd'hui sont (1) la route
- * /api/v1/admin/** gardée par ROLE_ADMIN, (2) la RLS par propriété
- * (V10) et (3) l'append-only. L'interception fine par permission sur
- * chaque endpoint est le chantier E6 restant.
+ * DEPUIS V14, la matrice N'EST PLUS DÉCORATIVE :
+ *  - côté BACK, `FiltrePermissions` exige la permission de chaque route ;
+ *  - côté FRONT (mode démo), les routes mock `/api/v1/**` vérifient le
+ *    jeton et la permission (401/403), et les vues masquent/refusent
+ *    les actions hors périmètre (roleHasPermission).
+ * L'infériorité d'hier (« déclarée mais jamais appliquée ») est corrigée.
  */
+
+import type { StaffRole, ViewId } from "@/lib/types";
 
 export type BackendRoleCode =
   | "admin"
@@ -22,17 +22,24 @@ export type BackendRoleCode =
   | "infirmier"
   | "pharmacien"
   | "agent_financier"
-  | "superviseur";
+  | "superviseur"
+  | "agent_saisie";
 
 export type PermissionCode =
   | "patient:lire"
   | "patient:ecrire"
+  | "consultation:lire"
+  | "consultation:ecrire"
   | "prescription:lire"
   | "prescription:ecrire"
   | "dispenser"
   | "paiement:initier"
   | "paiement:lire"
   | "paiement:reconcilier"
+  | "stock:gerer"
+  | "rendezvous:gerer"
+  | "reference:gerer"
+  | "laboratoire:ecrire"
   | "audit:lire"
   | "admin:gerer";
 
@@ -40,182 +47,190 @@ export interface BackendRole {
   code: BackendRoleCode;
   label: string;
   mission: string;
-  /** Rôle démo front équivalent (nomenclature de simulation). */
-  demoStaffRole:
-    | "ADMIN"
-    | "MEDECIN"
-    | "INFIRMIER"
-    | "PHARMACIEN"
-    | "CAISSIER"
-    | "SUPERVISEUR";
+  demoStaffRole: StaffRole;
 }
 
-/** Les six rôles du CHECK V12 — la nomenclature de référence. */
+/** Les SEPT rôles du CHECK V14 — nomenclature alignée front = back. */
 export const BACKEND_ROLES: BackendRole[] = [
   {
     code: "admin",
     label: "Administrateur",
-    mission: "Back-office total : structures, comptes, rôles, réconciliation.",
+    mission: "Back-office total : structures, comptes, rôles, réconciliation, SNIS.",
     demoStaffRole: "ADMIN",
   },
   {
     code: "medecin",
     label: "Médecin",
-    mission: "Dossier patient et prescription.",
+    mission: "Clinical complet : consultation, prescription, référence, laboratoire.",
     demoStaffRole: "MEDECIN",
   },
   {
     code: "infirmier",
-    label: "Infirmier / Infirmière",
-    mission: "Admission MPI et frais d'accès au comptoir (CSPS).",
+    label: "Infirmier (ICP)",
+    mission:
+      "Le BUNDLE complet du CSPS réel : admission, consultation, dispensation, caisse, RDV, référence, labo.",
     demoStaffRole: "INFIRMIER",
   },
   {
     code: "pharmacien",
-    label: "Pharmacien / Pharmacienne",
-    mission: "Dispensation au comptoir, contre-entrées.",
+    label: "Pharmacien",
+    mission: "Dispensation adossée au stock : comptoir, ruptures, réceptions COCOM.",
     demoStaffRole: "PHARMACIEN",
   },
   {
     code: "agent_financier",
-    label: "Agent financier (caissier)",
-    mission: "Paiements et facturation.",
-    demoStaffRole: "CAISSIER",
+    label: "Agent financier (caisse)",
+    mission: "Ticket d'accès, exonérations, encaissements, suivi des paiements.",
+    demoStaffRole: "AGENT_FINANCIER",
   },
   {
     code: "superviseur",
-    label: "Superviseur / Superviseure",
-    mission: "Supervision en lecture : paiements, audit.",
+    label: "Superviseur",
+    mission: "Supervision : audit, statistiques SNIS, références, paiements.",
     demoStaffRole: "SUPERVISEUR",
+  },
+  {
+    code: "agent_saisie",
+    label: "Agent de saisie",
+    mission: "Registre : admission MPI uniquement.",
+    demoStaffRole: "AGENT_SAISIE",
   },
 ];
 
 export interface PermissionInfo {
   code: PermissionCode;
   label: string;
-  scope: string;
+  description: string;
 }
 
-/** Les dix permissions de la nomenclature close. */
 export const RBAC_PERMISSIONS: PermissionInfo[] = [
-  {
-    code: "patient:lire",
-    label: "Lire le MPI",
-    scope: "Recherche et lecture du dossier patient (miroir national).",
-  },
-  {
-    code: "patient:ecrire",
-    label: "Écrire le MPI",
-    scope: "Création du dossier, création forcée après 409 (motif tracé).",
-  },
-  {
-    code: "prescription:lire",
-    label: "Lire les ordonnances",
-    scope: "Dossier pharmacologique (lecture).",
-  },
-  {
-    code: "prescription:ecrire",
-    label: "Prescrire",
-    scope: "Émission d'une ordonnance (append-only V8).",
-  },
-  {
-    code: "dispenser",
-    label: "Dispenser",
-    scope: "Dispensation au comptoir, cumul contrôlé, contre-entrée.",
-  },
-  {
-    code: "paiement:initier",
-    label: "Initier un paiement",
-    scope: "Initiation FedaPay, frais d'accès (idempotent).",
-  },
-  {
-    code: "paiement:lire",
-    label: "Suivre les paiements",
-    scope: "Paiements et factures (lecture).",
-  },
-  {
-    code: "paiement:reconcilier",
-    label: "Réconcilier",
-    scope: "Lancer le run de réconciliation qui fait foi.",
-  },
-  {
-    code: "audit:lire",
-    label: "Lire l'audit",
-    scope: "Journal d'audit et brèches d'accès d'urgence.",
-  },
-  {
-    code: "admin:gerer",
-    label: "Gérer le back-office",
-    scope: "Structures, utilisateurs, rôles, MFA, suspensions.",
-  },
+  { code: "patient:lire", label: "Lire le MPI", description: "Recherche et consultation des dossiers patients." },
+  { code: "patient:ecrire", label: "Écrire le MPI", description: "Création de dossiers, forçage après doublon." },
+  { code: "consultation:lire", label: "Lire les consultations", description: "Historique clinique des patients." },
+  { code: "consultation:ecrire", label: "Écrire les consultations", description: "Motif, constantes, diagnostic, notes — l'acte clinique complet." },
+  { code: "prescription:lire", label: "Lire les ordonnances", description: "Dossier pharmacologique." },
+  { code: "prescription:ecrire", label: "Écrire les ordonnances", description: "Émettre et annuler des prescriptions." },
+  { code: "dispenser", label: "Dispenser", description: "Dispensation au comptoir, contre-entrées." },
+  { code: "paiement:initier", label: "Initier un paiement", description: "Ticket d'accès, encaissement, exonération." },
+  { code: "paiement:lire", label: "Lire les paiements", description: "Suivi et facturation." },
+  { code: "paiement:reconcilier", label: "Réconcilier", description: "Le run nocturne qui fait foi." },
+  { code: "stock:gerer", label: "Gérer le stock", description: "Réceptions COCOM, inventaires, ruptures." },
+  { code: "rendezvous:gerer", label: "Gérer les RDV", description: "Confirmer, honorer, annuler, convoquer." },
+  { code: "reference:gerer", label: "Gérer les références", description: "Référence/contre-référence, table des non-abouties." },
+  { code: "laboratoire:ecrire", label: "Écrire le laboratoire", description: "TDR et résultats d'examens." },
+  { code: "audit:lire", label: "Lire l'audit", description: "Journal des accès, statistiques SNIS." },
+  { code: "admin:gerer", label: "Administrer", description: "Structures, utilisateurs, rôles, matrice." },
 ];
 
-/**
- * La matrice — copie EXACTE de RolesPermissions.construireMatrice()
- * (l'ordre d'insertion suit le semis V12). Aucune permission orpheline,
- * aucun rôle sans patient:lire.
- */
+/** La matrice 7 × 16 — miroir EXACT de V14/RolesPermissions.java. */
 export const RBAC_MATRIX: Record<BackendRoleCode, PermissionCode[]> = {
   admin: [
-    "patient:lire",
-    "patient:ecrire",
-    "prescription:lire",
-    "prescription:ecrire",
-    "dispenser",
-    "paiement:initier",
-    "paiement:lire",
-    "paiement:reconcilier",
-    "audit:lire",
-    "admin:gerer",
+    "patient:lire", "patient:ecrire",
+    "consultation:lire", "consultation:ecrire",
+    "prescription:lire", "prescription:ecrire", "dispenser",
+    "paiement:initier", "paiement:lire", "paiement:reconcilier",
+    "stock:gerer", "rendezvous:gerer", "reference:gerer", "laboratoire:ecrire",
+    "audit:lire", "admin:gerer",
   ],
-  medecin: ["patient:lire", "patient:ecrire", "prescription:lire", "prescription:ecrire"],
-  infirmier: ["patient:lire", "patient:ecrire", "paiement:initier"],
-  pharmacien: ["patient:lire", "prescription:lire", "dispenser"],
+  medecin: [
+    "patient:lire", "patient:ecrire",
+    "consultation:lire", "consultation:ecrire",
+    "prescription:lire", "prescription:ecrire",
+    "rendezvous:gerer", "reference:gerer", "laboratoire:ecrire",
+  ],
+  infirmier: [
+    "patient:lire", "patient:ecrire",
+    "consultation:lire", "consultation:ecrire",
+    "prescription:lire", "prescription:ecrire", "dispenser",
+    "paiement:initier",
+    "rendezvous:gerer", "reference:gerer", "laboratoire:ecrire",
+  ],
+  pharmacien: ["patient:lire", "prescription:lire", "dispenser", "stock:gerer"],
   agent_financier: ["patient:lire", "paiement:initier", "paiement:lire"],
-  superviseur: ["patient:lire", "prescription:lire", "paiement:lire", "audit:lire"],
+  superviseur: [
+    "patient:lire", "consultation:lire", "prescription:lire",
+    "paiement:lire", "reference:gerer", "audit:lire",
+  ],
+  agent_saisie: ["patient:lire", "patient:ecrire"],
 };
 
-export function roleHasPermission(
-  role: BackendRoleCode,
-  permission: PermissionCode,
-): boolean {
-  return RBAC_MATRIX[role].includes(permission);
+/** Code backend d'un rôle front (nomenclatures désormais ALIGNÉES). */
+export function backendCode(role: StaffRole): BackendRoleCode {
+  return role.toLowerCase() as BackendRoleCode;
 }
 
-/** Ce qui est réellement appliqué aujourd'hui (analyse RBAC, chap. 9). */
+/** LE test utilisé par les gardes : le rôle porte-t-il la permission ? */
+export function roleHasPermission(role: StaffRole, permission: PermissionCode): boolean {
+  return (RBAC_MATRIX[backendCode(role)] ?? []).includes(permission);
+}
+
+/**
+ * Vues autorisées — DÉDUITES des permissions (plus une table ad hoc
+ * divergente). Une vue existe s'il existe AU MOINS une action permise.
+ */
+export function viewsForRole(role: StaffRole): ViewId[] {
+  const p = (c: PermissionCode) => roleHasPermission(role, c);
+  const views: ViewId[] = ["dashboard", "sync"];
+  if (p("patient:lire")) views.push("patients");
+  if (p("consultation:ecrire") || p("consultation:lire")) views.push("consultation");
+  if (p("prescription:lire")) views.push("prescriptions");
+  if (p("paiement:lire") || p("paiement:initier")) views.push("payments");
+  if (p("rendezvous:gerer")) views.push("appointments");
+  if (p("stock:gerer")) views.push("stock");
+  if (p("reference:gerer")) views.push("references");
+  if (p("audit:lire")) {
+    views.push("statistics");
+    views.push("audit");
+    views.push("backoffice");
+  }
+  if (p("admin:gerer")) views.push("backoffice");
+  return Array.from(new Set(views));
+}
+
+/** Héritage de la nomenclature historique (ROLE_VIEWS déplacé ici). */
+export const ROLE_VIEWS: Record<StaffRole, ViewId[]> = {
+  AGENT_SAISIE: viewsForRole("AGENT_SAISIE"),
+  INFIRMIER: viewsForRole("INFIRMIER"),
+  MEDECIN: viewsForRole("MEDECIN"),
+  PHARMACIEN: viewsForRole("PHARMACIEN"),
+  AGENT_FINANCIER: viewsForRole("AGENT_FINANCIER"),
+  SUPERVISEUR: viewsForRole("SUPERVISEUR"),
+  ADMIN: viewsForRole("ADMIN"),
+};
+
+/** Pour l'onglet back-office : ce qui est APPLIQUÉ depuis V14. */
 export const RBAC_ENFORCED_TODAY: { title: string; detail: string }[] = [
   {
-    title: "Route /api/v1/admin/** gardée par rôle",
+    title: "Intercepteur par permission (back, V14)",
     detail:
-      "Spring Security exige ROLE_ADMIN sur tout le back-office (403 problem+json sinon, refus journalisé) — la seule garde HTTP par rôle du produit.",
+      "FiltrePermissions exige la permission de chaque route /api/v1/** — refus 403 problem+json + entrée d'audit PERMISSION_DENIED.",
   },
   {
-    title: "RLS par propriété (V10)",
+    title: "Authentification interne (V14)",
     detail:
-      "Chaque table attribuable ne laisse lire/écrire une ligne qu'à son propriétaire ou à l'admin (fail-closed, testé par RlsAppRwIT) : paiements à l'initiateur, ordonnances au prescripteur, dispensations au dispensateur.",
+      "POST /api/v1/auth/login (BCrypt + MFA admin) et OTP patient → jetons HS256 ; securite.jwt.actif est VRAI par défaut.",
   },
   {
-    title: "Append-only + machines à états",
+    title: "Périmètre patient côté API",
     detail:
-      "Aucun octroi DELETE pour le rôle applicatif, gardes SQL V3/V8/V12, paiement à 8 états forward-only, suspension motivée : le passé ne se réécrit pas.",
+      "Un jeton patient n'accède qu'à SES données (dossier, consultations, ordonnances, RDV) — méthode-aware, propriété vérifiée.",
+  },
+  {
+    title: "Gardes front par permission",
+    detail:
+      "Les vues masquent les actions hors périmètre (roleHasPermission) et les routes mock vérifient le jeton (401/403 honnêtes).",
   },
 ];
 
-/** Les trois écarts découverts par l'analyse (à corriger — P0.5). */
+/** Ce qui reste à câbler (honnêteté de rigueur). */
 export const RBAC_GAPS: { title: string; detail: string }[] = [
   {
-    title: "Écart matrice / RLS sur les lectures croisées",
+    title: "Cloisonnement par structure (P0.6)",
     detail:
-      "La matrice accorde prescription:lire au pharmacien et paiement:lire à l'agent financier et au superviseur ; les policies V10 ne laissent lire qu'au propriétaire ou à l'admin : sous app_rw, le comptoir ne peut pas ouvrir l'ordonnance du médecin. Arbitrage requis.",
+      "Les permissions sont par rôle ; le filtrage par structure d'appartenance (GUC prêtes côté RLS) reste à câbler sur les listes.",
   },
   {
-    title: "Interception par permission non câblée",
-    detail:
-      "La matrice est déclarée, persistée (V12) et exposée (/admin/me/permissions), mais aucun endpoint hors /admin/** ne la vérifie : seule /admin/** est gardée par rôle, la RLS borne par propriété. Câbler l'intercepteur est le chantier E6 restant.",
-  },
-  {
-    title: "Périmètre structure inerte",
-    detail:
-      "Les policies facility (V5) et app.current_facility_ids() existent, mais le filtre ne pose jamais app.facility_ids : le scope clinique effectif est le praticien ou l'admin, jamais la structure.",
+    title: "Vérification croisée matrice/RLS en CI",
+    detail: "BackofficeIT verrouille table↔domaine ; un test croisé front/back reste à écrire.",
   },
 ];

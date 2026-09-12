@@ -70,7 +70,7 @@ export const STAFF_ROLE_LABELS: Record<StaffRole, string> = {
   INFIRMIER: "Infirmier / Infirmière",
   MEDECIN: "Médecin",
   PHARMACIEN: "Pharmacien",
-  CAISSIER: "Caissier",
+  AGENT_FINANCIER: "Caissier",
   SUPERVISEUR: "Superviseur régional",
   ADMIN: "Administrateur (MFA obligatoire)",
 };

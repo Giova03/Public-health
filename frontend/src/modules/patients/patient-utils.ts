@@ -114,6 +114,10 @@ export const PRESCRIPTION_STATUS_LABELS: Record<
     className:
       "border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
   },
+  ENTERED_IN_ERROR: {
+    label: "Erreur de saisie",
+    className: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+  },
   CANCELLED: {
     label: "Annulée",
     className: "border-destructive/30 bg-destructive/10 text-destructive",

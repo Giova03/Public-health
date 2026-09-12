@@ -13,13 +13,19 @@
  */
 
 import type {
+  AppointmentRecord,
+  AuditEntryView,
+  ConsultationRecord,
   DispenseEvent,
   HealthFacility,
   OperationAck,
   Patient,
   PaymentRecord,
   Prescription,
+  ReferenceFiche,
   StaffUser,
+  StockItem,
+  StockMouvement,
 } from "@/lib/types";
 import { PAYMENT_TRANSITIONS } from "@/lib/types";
 import { uuidV7 } from "@/lib/uuid";
@@ -41,6 +47,17 @@ interface DemoState {
   phSeqByYear: Map<number, number>;
   seenOpIds: Map<string, OperationAck>;
   bootedAt: string;
+  /* V14 — correction audit de fidélité */
+  consultations: ConsultationRecord[];
+  appointments: AppointmentRecord[];
+  stockItems: StockItem[];
+  stockMouvements: StockMouvement[];
+  references: ReferenceFiche[];
+  auditLog: AuditEntryView[];
+  /** OTP patients en attente : téléphone → code (5 min côté back). */
+  patientOtp: Map<string, string>;
+  /** Défis MFA en attente : email → code. */
+  mfaChallenges: Map<string, string>;
 }
 
 let state: DemoState | null = null;
@@ -173,14 +190,14 @@ function init(): DemoState {
   ];
 
   const users: StaffUser[] = [
-    { id: "u-001", fullName: "Aminata Sawadogo", role: "INFIRMIER", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
-    { id: "u-002", fullName: "Estelle Sanou", role: "PHARMACIEN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
-    { id: "u-003", fullName: "Jean Kiendrebeogo", role: "MEDECIN", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(1) },
-    { id: "u-004", fullName: "Ibrahim Kone", role: "PHARMACIEN", facility: "CHU Yalgado Ouédraogo", mfaEnabled: true, active: true, lastSeenAt: daysAgo(1) },
-    { id: "u-005", fullName: "Sylvie Bationo", role: "CAISSIER", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
-    { id: "u-006", fullName: "Pascal Ouedraogo", role: "MEDECIN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(2) },
-    { id: "u-007", fullName: "Chantal Bambara", role: "SUPERVISEUR", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(3) },
-    { id: "u-008", fullName: "Roger Compaore", role: "ADMIN", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(0) },
+    { id: "u-001", email: "infirmier@demo.bf", fullName: "Aminata Sawadogo", role: "INFIRMIER", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
+    { id: "u-002", email: "pharmacien@demo.bf", fullName: "Estelle Sanou", role: "PHARMACIEN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
+    { id: "u-003", email: "medecin@demo.bf", fullName: "Jean Kiendrebeogo", role: "MEDECIN", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(1) },
+    { id: "u-004", email: "pharmacien2@demo.bf", fullName: "Ibrahim Kone", role: "PHARMACIEN", facility: "CHU Yalgado Ouédraogo", mfaEnabled: true, active: true, lastSeenAt: daysAgo(1) },
+    { id: "u-005", email: "caissier@demo.bf", fullName: "Sylvie Bationo", role: "AGENT_FINANCIER", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
+    { id: "u-006", email: "medecin2@demo.bf", fullName: "Pascal Ouedraogo", role: "MEDECIN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(2) },
+    { id: "u-007", email: "superviseur@demo.bf", fullName: "Chantal Bambara", role: "SUPERVISEUR", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(3) },
+    { id: "u-008", email: "admin@demo.bf", fullName: "Roger Compaore", role: "ADMIN", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(0) },
   ];
 
   const facilities: HealthFacility[] = [
@@ -204,10 +221,112 @@ function init(): DemoState {
   const phSeqByYear = new Map<number, number>();
   phSeqByYear.set(2026, 67);
 
+  // ---------------------------------------------------------------
+  // V14 — consultation (l'acte clinique PERSISTÉ), RDV, stock,
+  // référence : semés pour que les nouvelles vues vivent.
+  // ---------------------------------------------------------------
+  const consultations: ConsultationRecord[] = [
+    {
+      id: "c-001", patientId: "p-001", facility: "CSPS Ouaga 12",
+      practitioner: "Aminata Sawadogo", motif: "Fièvre et céphalées depuis 3 jours",
+      diagnosticCode: "B54", diagnosticLabel: "Paludisme à P. falciparum",
+      notes: "TDR positif. Patient couché, prostration légère.",
+      constantes: { taSystolique: 110, taDiastolique: 70, temperatureC: 38.9, poidsKg: 58 },
+      examens: [{ id: "e-001", type: "tdr_paludisme", statut: "resultat", resultat: "TDR positif", positif: true }],
+      date: daysAgo(9),
+    },
+    {
+      id: "c-002", patientId: "p-002", facility: "CSPS Ouaga 12",
+      practitioner: "Jean Kiendrebeogo", motif: "Toux et difficulté respiratoire",
+      diagnosticCode: "J06", diagnosticLabel: "Infection respiratoire aiguë",
+      notes: "Sibilants diffus, pas de signe de gravité.",
+      constantes: { temperatureC: 37.8, poidsKg: 9 },
+      examens: [],
+      date: daysAgo(4),
+    },
+    {
+      id: "c-003", patientId: "p-004", facility: "CMA Kossodo",
+      practitioner: "Pascal Ouedraogo", motif: "Contrôle tension artérielle",
+      diagnosticCode: "I10", diagnosticLabel: "Hypertension artérielle essentielle",
+      constantes: { taSystolique: 165, taDiastolique: 95, poidsKg: 78 },
+      examens: [],
+      date: daysAgo(2),
+    },
+  ];
+
+  const appointments: AppointmentRecord[] = [
+    {
+      id: "rdv-001", patientId: "p-002", structure: "CSPS Ouaga 12", type: "controle",
+      creneau: hoursFromNow(26), statut: "confirme", motif: "Contrôle après traitement IRA",
+      demandePar: "agent", createdAt: daysAgo(1),
+    },
+    {
+      id: "rdv-002", patientId: "p-003", structure: "CMA Kossodo", type: "cpn",
+      creneau: hoursFromNow(48), statut: "demande", motif: "CPN 3 — grossesse 28 SA",
+      demandePar: "patient", createdAt: daysAgo(0),
+    },
+    {
+      id: "rdv-003", patientId: "p-009", structure: "CSPS Ouaga 12", type: "vaccination",
+      creneau: daysAgoDate(2), statut: "honore", motif: "PEV — rappel Penta 3",
+      demandePar: "agent", createdAt: daysAgo(6),
+    },
+  ];
+
+  const stockItems: StockItem[] = [
+    { id: "s-001", structure: "CSPS Ouaga 12", medicationCode: "AL-ACT", medicationLabel: "Artéméther-Luméfantrine 20/120", quantity: 240, seuilAlerte: 50 },
+    { id: "s-002", structure: "CSPS Ouaga 12", medicationCode: "PARA-500", medicationLabel: "Paracétamol 500 mg", quantity: 0, seuilAlerte: 100 },
+    { id: "s-003", structure: "CSPS Ouaga 12", medicationCode: "AMOX-500", medicationLabel: "Amoxicilline 500 mg", quantity: 85, seuilAlerte: 40 },
+    { id: "s-004", structure: "CSPS Ouaga 12", medicationCode: "SRO", medicationLabel: "SRO sachet", quantity: 30, seuilAlerte: 60 },
+    { id: "s-005", structure: "CMA Kossodo", medicationCode: "AL-ACT", medicationLabel: "Artéméther-Luméfantrine 20/120", quantity: 610, seuilAlerte: 100 },
+  ];
+
+  const stockMouvements: StockMouvement[] = [
+    { id: "m-001", medicationCode: "PARA-500", type: "reception", quantity: 500, motif: "Réception trimestrielle CAMEG", date: daysAgo(30) },
+    { id: "m-002", medicationCode: "PARA-500", type: "dispensation", quantity: 500, motif: "Dispensations cumulées", date: daysAgo(0) },
+    { id: "m-003", medicationCode: "AL-ACT", type: "reception", quantity: 300, motif: "Réception CSD", date: daysAgo(15) },
+  ];
+
+  const references: ReferenceFiche[] = [
+    {
+      id: "ref-001", patientId: "p-001", structureOrigine: "CSPS Ouaga 12",
+      structureDestination: "CHU Yalgado Ouédraogo",
+      motif: "Paludisme grave — anémie sévère", urgence: true, statut: "envoyee",
+      createdAt: daysAgo(1),
+    },
+    {
+      id: "ref-002", patientId: "p-004", structureOrigine: "CMA Kossodo",
+      structureDestination: "CHU Yalgado Ouédraogo",
+      motif: "HTA compliquée — bilan rénal", urgence: false, statut: "retournee",
+      contreReference: "Bilan rénal normal. Poursuivre amlodipine 5 mg, contrôle à 1 mois.",
+      createdAt: daysAgo(12), recueLe: daysAgo(11),
+    },
+  ];
+
+  const auditLog: AuditEntryView[] = [
+    { date: daysAgo(0), acteur: "u-001", action: "PATIENT_READ", entite: "patient", entiteId: "p-001", resultat: "SUCCESS" },
+    { date: daysAgo(0), acteur: "u-008", action: "AUTH_LOGIN", entite: "utilisateur", entiteId: "u-008", motif: "connexion interne HS256", resultat: "SUCCESS" },
+    { date: daysAgo(1), acteur: "u-002", action: "DISPENSATION_RECORDED", entite: "dispensation", motif: "AL-ACT 30", resultat: "SUCCESS" },
+    { date: daysAgo(1), acteur: "u-008", action: "PERMISSION_DENIED", entite: "api", motif: "GET /api/v1/admin/users : La permission admin:gerer est requise (rôle medecin)", resultat: "DENIED" },
+    { date: daysAgo(2), acteur: "u-007", action: "STOCK_ALERTE_SEUIL", entite: "stock", motif: "SRO sous le seuil (30)", resultat: "SUCCESS" },
+  ];
+
   return {
     patients, prescriptions, payments, users, facilities, deltaLog,
     phSeqByYear, seenOpIds: new Map(), bootedAt: iso(new Date()),
+    consultations, appointments, stockItems, stockMouvements, references,
+    auditLog, patientOtp: new Map(), mfaChallenges: new Map(),
   };
+}
+
+function hoursFromNow(h: number) {
+  const d = new Date();
+  d.setHours(d.getHours() + h);
+  return d.toISOString();
+}
+function daysAgoDate(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.toISOString();
 }
 
 export function getState(): DemoState {

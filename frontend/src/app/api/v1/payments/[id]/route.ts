@@ -7,6 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { exigerPermission } from "@/lib/demo/guard";
 import type { PaymentRecord } from "@/lib/types";
 import { PAYMENT_TRANSITIONS } from "@/lib/types";
 import { applyDelta, findPayment, transitionPayment } from "@/lib/demo/seed";
@@ -14,9 +15,11 @@ import { applyDelta, findPayment, transitionPayment } from "@/lib/demo/seed";
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const gardeLecture = exigerPermission(request, "paiement:lire");
+  if (gardeLecture.refus) return gardeLecture.refus;
   const { id } = await params;
   const payment = findPayment(id);
   if (!payment) {
@@ -41,6 +44,8 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const garde = exigerPermission(request, "paiement:lire");
+  if (garde.refus) return garde.refus;
   const { id } = await params;
   const payment = findPayment(id);
   if (!payment) {

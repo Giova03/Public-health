@@ -12,7 +12,7 @@
  * dossier patient (MPI partagé + synchronisation).
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
@@ -37,16 +37,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { FACILITY_NAMES, STAFF_ROLE_LABELS } from "@/lib/demo/reference";
+import { STAFF_ROLE_LABELS } from "@/lib/demo/reference";
 import { useSessionStore } from "@/lib/session";
-import { useAppStore } from "@/lib/store";
 import type { StaffRole } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -115,12 +113,13 @@ const DEMO_PATIENTS: { name: string; phone: string }[] = [
   { name: "Mariam OUATTARA", phone: "74112233" },
 ];
 
-const DEMO_STAFF: { name: string; role: StaffRole; facility: string }[] = [
-  { name: "Aminata Sawadogo", role: "INFIRMIER", facility: "CSPS Ouaga 12" },
-  { name: "Jean Kiendrebeogo", role: "MEDECIN", facility: "CSPS Ouaga 12" },
-  { name: "Estelle Sanou", role: "PHARMACIEN", facility: "CMA Kossodo" },
-  { name: "Sylvie Bationo", role: "CAISSIER", facility: "CMA Kossodo" },
-  { name: "Roger Compaore", role: "ADMIN", facility: "DRS Centre" },
+const DEMO_STAFF: { name: string; role: StaffRole; facility: string; email: string }[] = [
+  { name: "Aminata Sawadogo", role: "INFIRMIER", facility: "CSPS Ouaga 12", email: "infirmier@demo.bf" },
+  { name: "Jean Kiendrebeogo", role: "MEDECIN", facility: "CSPS Ouaga 12", email: "medecin@demo.bf" },
+  { name: "Estelle Sanou", role: "PHARMACIEN", facility: "CMA Kossodo", email: "pharmacien@demo.bf" },
+  { name: "Sylvie Bationo", role: "AGENT_FINANCIER", facility: "CMA Kossodo", email: "caissier@demo.bf" },
+  { name: "Chantal Bambara", role: "SUPERVISEUR", facility: "DRS Centre", email: "superviseur@demo.bf" },
+  { name: "Roger Compaore", role: "ADMIN", facility: "DRS Centre", email: "admin@demo.bf" },
 ];
 
 function formatPhone(phone: string): string {
@@ -135,76 +134,94 @@ function normalizePhone(value: string): string {
 /* Écran de connexion                                                   */
 /* -------------------------------------------------------------------- */
 
-type Step = "profile" | "patient-phone" | "patient-otp" | "staff-form";
+type Step = "profile" | "patient-phone" | "patient-otp" | "staff-form" | "staff-mfa";
 
 export function LoginView() {
   const loginPatient = useSessionStore((s) => s.loginPatient);
   const loginStaff = useSessionStore((s) => s.loginStaff);
-  const patients = useAppStore((s) => s.patients);
+  const demanderOtpPatient = useSessionStore((s) => s.demanderOtpPatient);
   const { toast } = useToast();
 
   const [step, setStep] = useState<Step>("profile");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
-  const [expectedOtp, setExpectedOtp] = useState<string | null>(null);
-  const [pendingPatientId, setPendingPatientId] = useState<string | null>(null);
+  const [otpAttendu, setOtpAttendu] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [enCours, setEnCours] = useState(false);
 
-  const [staffName, setStaffName] = useState("");
-  const [staffRole, setStaffRole] = useState<StaffRole>("INFIRMIER");
-  const [staffFacility, setStaffFacility] = useState(FACILITY_NAMES[0]);
+  // V14 : login staff par EMAIL + MOT DE PASSE (BCrypt côté back,
+  // MFA pour les comptes protégés) — plus de nom/rôle libres.
+  const [staffEmail, setStaffEmail] = useState("");
+  const [staffPassword, setStaffPassword] = useState("");
+  const [staffMfa, setStaffMfa] = useState("");
 
-  const pendingPatient = useMemo(
-    () => patients.find((p) => p.id === pendingPatientId) ?? null,
-    [patients, pendingPatientId],
-  );
-
-  function sendCode() {
+  async function sendCode() {
     const digits = normalizePhone(phone);
     if (digits.length < 8) {
       setError("Numéro incomplet : 8 chiffres attendus (ex. 70 12 34 56).");
       return;
     }
-    const match = patients.find(
-      (p) => p.active && normalizePhone(p.phone ?? "") === digits,
-    );
-    if (!match) {
+    setEnCours(true);
+    setError(null);
+    const code = await demanderOtpPatient(digits);
+    setEnCours(false);
+    if (!code) {
       setError(
-        "Aucun dossier actif avec ce numéro dans le miroir. Essayez un compte de démonstration ci-dessous.",
+        "Ce numéro ne correspond à aucun dossier (réponse neutre, aucune énumération). Essayez un compte patient de démonstration.",
       );
       return;
     }
-    const code = String(Math.floor(1000 + Math.random() * 9000));
-    setExpectedOtp(code);
-    setPendingPatientId(match.id);
-    setError(null);
+    setOtpAttendu(code);
     setStep("patient-otp");
     toast({
-      title: "Code SMS envoyé (démo)",
-      description: `Vers +226 ${formatPhone(digits)} · code : ${code}`,
+      title: "Code envoyé (démo)",
+      description: `Vers +226 ${formatPhone(digits)} — posture démo : le code est affiché, en production il part par SMS.`,
     });
   }
 
-  function verifyOtp() {
-    if (otp.trim() !== expectedOtp) {
-      setError("Code incorrect — vérifiez le code affiché dans le SMS de démo.");
-      return;
+  async function verifyOtp() {
+    setEnCours(true);
+    const ok = await loginPatient(normalizePhone(phone), otp.trim());
+    setEnCours(false);
+    if (!ok) {
+      setError("Code incorrect ou expiré — redemandez un code.");
     }
-    if (!pendingPatient) return;
-    loginPatient({
-      patientId: pendingPatient.id,
-      fullName: `${pendingPatient.name.given} ${pendingPatient.name.family}`,
-      phone: normalizePhone(pendingPatient.phone ?? phone),
-      facility: pendingPatient.facility,
-    });
   }
 
-  function submitStaff() {
-    if (staffName.trim().length < 3) {
-      setError("Indiquez votre nom complet (au moins 3 caractères).");
+  async function submitStaff() {
+    if (!staffEmail.includes("@") || staffPassword.length < 4) {
+      setError("Email professionnel et mot de passe obligatoires.");
       return;
     }
-    loginStaff({ fullName: staffName.trim(), role: staffRole, facility: staffFacility });
+    setEnCours(true);
+    setError(null);
+    const resultat = await loginStaff(staffEmail.trim(), staffPassword);
+    setEnCours(false);
+    if (resultat === "MFA") {
+      setStep("staff-mfa");
+      toast({
+        title: "Double facteur requise",
+        description: "Un code à 6 chiffres a été généré (renvoyé en démo : aucune passerelle SMS livrée).",
+      });
+      return;
+    }
+    if (resultat === "ERREUR") {
+      setError("Email ou mot de passe incorrect (message neutre — aucune énumération).");
+    }
+  }
+
+  async function submitMfa() {
+    if (staffMfa.trim().length !== 6) {
+      setError("Le code MFA comporte 6 chiffres.");
+      return;
+    }
+    setEnCours(true);
+    setError(null);
+    const resultat = await loginStaff(staffEmail.trim(), staffPassword, staffMfa.trim());
+    setEnCours(false);
+    if (resultat === "ERREUR") {
+      setError("Code MFA invalide ou expiré.");
+    }
   }
 
   return (
@@ -437,9 +454,7 @@ export function LoginView() {
                   Code de vérification
                 </h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
-                  {pendingPatient
-                    ? `Dossier trouvé : ${pendingPatient.name.given} ${pendingPatient.name.family} (${pendingPatient.phReference}). Code envoyé au +226 ${formatPhone(normalizePhone(pendingPatient.phone ?? phone))}.`
-                    : "Code envoyé par SMS."}
+                  {`Code envoyé au +226 ${formatPhone(normalizePhone(phone))} — réponse neutre si le numéro est inconnu (aucune énumération).`}
                 </p>
 
                 <div className="mt-5 flex items-start gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs leading-relaxed text-emerald-800 dark:text-emerald-300">
@@ -450,7 +465,7 @@ export function LoginView() {
                   <span>
                     <strong className="font-semibold">SMS de démonstration</strong>{" "}
                     — votre code à usage unique est{" "}
-                    <strong className="tnum font-bold">{expectedOtp}</strong>.
+                    <strong className="tnum font-bold">{otpAttendu}</strong>.
                     <br />
                     <span className="text-emerald-700/80 dark:text-emerald-400/80">
                       En production, ce code arrive par SMS réel et n&apos;est
@@ -505,56 +520,30 @@ export function LoginView() {
 
                 <div className="mt-6 space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="staff-name">Nom complet</Label>
+                    <Label htmlFor="staff-email">Email professionnel</Label>
                     <Input
-                      id="staff-name"
-                      autoComplete="name"
-                      placeholder="Ex. Aminata Sawadogo"
-                      value={staffName}
-                      onChange={(e) => setStaffName(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && submitStaff()}
+                      id="staff-email"
+                      type="email"
+                      autoComplete="username"
+                      placeholder="prenom.nom@structure.bf"
+                      value={staffEmail}
+                      onChange={(e) => setStaffEmail(e.target.value)}
                       className="rounded-full"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="staff-role">Rôle</Label>
-                    <Select
-                      value={staffRole}
-                      onValueChange={(v) => setStaffRole(v as StaffRole)}
-                    >
-                      <SelectTrigger id="staff-role" className="rounded-full">
-                        <SelectValue placeholder="Choisir un rôle" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(STAFF_ROLE_LABELS) as StaffRole[]).map(
-                          (role) => (
-                            <SelectItem key={role} value={role}>
-                              {STAFF_ROLE_LABELS[role]}
-                            </SelectItem>
-                          ),
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="staff-facility">Structure</Label>
-                    <Select
-                      value={staffFacility}
-                      onValueChange={setStaffFacility}
-                    >
-                      <SelectTrigger id="staff-facility" className="rounded-full">
-                        <SelectValue placeholder="Choisir une structure" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {FACILITY_NAMES.map((name) => (
-                          <SelectItem key={name} value={name}>
-                            {name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="staff-password">Mot de passe</Label>
+                    <Input
+                      id="staff-password"
+                      type="password"
+                      autoComplete="current-password"
+                      placeholder="••••••••"
+                      value={staffPassword}
+                      onChange={(e) => setStaffPassword(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && submitStaff()}
+                      className="rounded-full"
+                    />
                   </div>
 
                   <Button
@@ -562,32 +551,76 @@ export function LoginView() {
                     size="lg"
                     className="w-full"
                     onClick={submitStaff}
+                    disabled={enCours}
                   >
                     <HeartPulse className="h-4 w-4" aria-hidden="true" />
-                    Ouvrir mon poste
+                    {enCours ? "Vérification…" : "Ouvrir mon poste"}
                   </Button>
                 </div>
 
                 <DemoChips
-                  title="Comptes de démonstration (clic = pré-remplissage)"
+                  title="Comptes de démonstration · mot de passe Demo1234! (clic = pré-remplissage)"
                   items={DEMO_STAFF.map((s) => ({
-                    key: s.name,
-                    label: `${s.name} · ${STAFF_ROLE_LABELS[s.role].split(" (")[0]} · ${s.facility}`,
+                    key: s.email,
+                    label: `${STAFF_ROLE_LABELS[s.role].split(" (")[0]} · ${s.email}`,
                     onClick: () => {
-                      setStaffName(s.name);
-                      setStaffRole(s.role);
-                      setStaffFacility(s.facility);
+                      setStaffEmail(s.email);
+                      setStaffPassword("Demo1234!");
                       setError(null);
                     },
                   }))}
                 />
                 <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground">
-                  Démonstration : cette connexion simulée ne porte aucune
-                  sécurité réelle. En production, chaque poste s&apos;authentifie
-                  par compte personnel (JWT, MFA pour les rôles sensibles) et
-                  le serveur applique la matrice des rôles — visible dans le
-                  back-office, onglet « Rôles et permissions ».
+                  V14 : connexion RÉELLE par compte — le serveur vérifie le mot
+                  de passe (BCrypt), exige la MFA des comptes protégés, émet un
+                  jeton signé et applique la matrice des rôles (403 si la
+                  permission manque). Plus personne ne « choisit » son rôle.
                 </p>
+                {error && <ErrorBox message={error} />}
+              </motion.div>
+            )}
+
+            {step === "staff-mfa" && (
+              <motion.div
+                key="staff-mfa"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+              >
+                <BackButton onBack={() => setStep("staff-form")} />
+                <h2 className="text-2xl font-bold tracking-tight">
+                  Double facteur
+                </h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">
+                  Ce compte est protégé par la MFA. Saisissez le code à 6
+                  chiffres (en démo, il est affiché dans le toast — en
+                  production, il part par SMS/email).
+                </p>
+                <div className="mt-6 space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="staff-mfa">Code à 6 chiffres</Label>
+                    <Input
+                      id="staff-mfa"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="123456"
+                      value={staffMfa}
+                      onChange={(e) => setStaffMfa(e.target.value.replace(/\D/g, ""))}
+                      onKeyDown={(e) => e.key === "Enter" && submitMfa()}
+                      className="rounded-full tracking-[0.3em]"
+                    />
+                  </div>
+                  <Button
+                    variant="medical"
+                    size="lg"
+                    className="w-full"
+                    onClick={submitMfa}
+                    disabled={enCours}
+                  >
+                    Vérifier et ouvrir mon poste
+                  </Button>
+                </div>
                 {error && <ErrorBox message={error} />}
               </motion.div>
             )}
