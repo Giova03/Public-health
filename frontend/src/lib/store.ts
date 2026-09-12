@@ -15,6 +15,8 @@ import type {
   AuditEntryView,
   ConsultationConstantes,
   ConsultationRecord,
+  ExonerationNature,
+  FraisAccesTicket,
   ReferenceFiche,
   SnisStats,
   StockItem,
@@ -40,12 +42,16 @@ import {
   createReference as apiCreateReference,
   createStockMouvement as apiCreateStockMouvement,
   declareDeath as apiDeclareDeath,
+  encaisserTicket as apiEncaisserTicket,
+  exonererTicket as apiExonererTicket,
   getSnis as apiGetSnis,
   getStock as apiGetStock,
   listAppointments as apiListAppointments,
   listAuditEntries as apiListAudit,
   listConsultations as apiListConsultations,
+  listFraisAcces as apiListFraisAcces,
   listReferences as apiListReferences,
+  ouvrirTicket as apiOuvrirTicket,
   transitionAppointment as apiTransitionAppointment,
   transitionReference as apiTransitionReference,
 } from "@/lib/api-client";
@@ -80,7 +86,7 @@ export type CreatePatientResult =
 export type MutationResult =
   | { status: "ok" }
   | { status: "queued" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; code?: "FRAIS_ACCES_REQUIS" };
 
 interface AppState {
   /* Navigation (mono-page : l'utilisateur ne voit que « / ») */
@@ -112,6 +118,8 @@ interface AppState {
   references: ReferenceFiche[];
   auditEntries: AuditEntryView[];
   snis: SnisStats | null;
+  /** I5 — tickets d'accès : la caisse AVANT la consultation. */
+  fraisAcces: FraisAccesTicket[];
 
   /* Outbox & protocole E2 */
   outbox: SyncOperation[];
@@ -212,6 +220,11 @@ interface AppState {
     kind: "CANCELLED" | "ENTERED_IN_ERROR",
     motif: string,
   ) => Promise<MutationResult>;
+  /* I5 — la caisse : ticket d'accès avant la consultation. */
+  loadCaisse: (structureId: string) => Promise<void>;
+  ouvrirTicket: (patientId: string, structureId: string, montantXof?: number) => Promise<MutationResult>;
+  encaisserTicket: (id: string, montantXof?: number) => Promise<MutationResult>;
+  exonererTicket: (id: string, nature: ExonerationNature, motif: string) => Promise<MutationResult>;
 }
 
 /* --------------------------- Helpers internes ------------------------- */
@@ -282,6 +295,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   snis: null,
   users: [],
   facilities: [],
+  fraisAcces: [],
 
   outbox: [],
   syncLog: [],
@@ -936,6 +950,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       set((s) => ({ consultations: [consultation, ...s.consultations] }));
       return { status: "ok" };
     } catch (error) {
+      // I5 : le 402 Frais d'accès renvoie le clinicien à la CAISSE —
+      // le parcours monétaire réel du BF, porté jusqu'à l'UI.
+      if (error instanceof ApiError && error.status === 402) {
+        return {
+          status: "error",
+          code: "FRAIS_ACCES_REQUIS",
+          message: error.message,
+        };
+      }
       return {
         status: "error",
         message: error instanceof Error ? error.message : "Erreur inconnue",
@@ -1132,6 +1155,70 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       return {
         status: "error",
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  /* ------------------ I5 — la caisse (frais d'accès) ------------------- */
+
+  loadCaisse: async (structureId) => {
+    if (!get().isOnline()) return;
+    try {
+      // La file d'attente du jour (en_attente) + le registre complet
+      // du jour pour les KPI de caisse.
+      const [file, jour] = await Promise.all([
+        apiListFraisAcces({ structureId, statut: "en_attente" }),
+        apiListFraisAcces({ structureId }),
+      ]);
+      const vus = new Set(file.tickets.map((t) => t.id));
+      const tickets = [...file.tickets, ...jour.tickets.filter((t) => !vus.has(t.id))];
+      set({ fraisAcces: tickets });
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  ouvrirTicket: async (patientId, structureId, montantXof) => {
+    try {
+      const ticket = await apiOuvrirTicket({ patientId, structureId, montantXof });
+      set((s) => ({
+        fraisAcces: [ticket, ...s.fraisAcces.filter((t) => t.id !== ticket.id)],
+      }));
+      return { status: "ok" as const };
+    } catch (error) {
+      return {
+        status: "error" as const,
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  encaisserTicket: async (id, montantXof) => {
+    try {
+      const ticket = await apiEncaisserTicket(id, montantXof);
+      set((s) => ({
+        fraisAcces: s.fraisAcces.map((t) => (t.id === id ? ticket : t)),
+      }));
+      return { status: "ok" as const };
+    } catch (error) {
+      return {
+        status: "error" as const,
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  exonererTicket: async (id, nature, motif) => {
+    try {
+      const ticket = await apiExonererTicket(id, nature, motif);
+      set((s) => ({
+        fraisAcces: s.fraisAcces.map((t) => (t.id === id ? ticket : t)),
+      }));
+      return { status: "ok" as const };
+    } catch (error) {
+      return {
+        status: "error" as const,
         message: error instanceof Error ? error.message : "Erreur inconnue",
       };
     }

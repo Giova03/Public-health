@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { getState } from "@/lib/demo/seed";
+import { getState, ticketDuJour } from "@/lib/demo/seed";
 import { exigerPermission, exigerPerimetrePatient } from "@/lib/demo/guard";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +61,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { title: "Consultation impossible", detail: "Dossier scellé : décès déclaré — aucune consultation possible", status: 409 },
       { status: 409 },
+    );
+  }
+
+  // I5 — le parcours monétaire réel : ticket d'accès du jour réglé AVANT
+  // l'acte clinique (payé ou exonéré à la caisse), sinon 402 Payment
+  // Required avec etape=caisse (le clinicien est renvoyé à la caisse).
+  const structure = garde.token.structure ?? "CSPS Ouaga 12";
+  const ticket = ticketDuJour(corps.patientId, structure);
+  if (!ticket || ticket.statut === "en_attente") {
+    return NextResponse.json(
+      {
+        title: "Frais d'accès requis",
+        detail: ticket
+          ? "Ticket d'accès EN ATTENTE à la caisse : encaissez ou exonérez avant la consultation"
+          : `Aucun ticket d'accès pour aujourd'hui : passage à la caisse obligatoire avant la consultation (${structure})`,
+        etape: "caisse",
+        status: 402,
+      },
+      { status: 402 },
     );
   }
 

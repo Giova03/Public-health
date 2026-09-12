@@ -28,6 +28,8 @@ import type {
   CreatePatientInput,
   DispenseLine,
   DuplicateCandidate,
+  ExonerationNature,
+  FraisAccesTicket,
   OperationAck,
   Patient,
   PaymentRecord,
@@ -286,6 +288,56 @@ export function runReconciliation(): Promise<{
   ranAt: string;
 }> {
   return request("/payments/reconcile", { method: "POST" });
+}
+
+/* ---------------------- I5 frais d'accès (la caisse) ------------------- */
+
+/** File d'attente de la caisse (en_attente du jour) OU historique patient. */
+export function listFraisAcces(filter?: {
+  patientId?: string;
+  structureId?: string;
+  statut?: string;
+}): Promise<{ tickets: FraisAccesTicket[] }> {
+  const params = new URLSearchParams();
+  if (filter?.patientId) params.set("patientId", filter.patientId);
+  if (filter?.structureId) params.set("structureId", filter.structureId);
+  if (filter?.statut) params.set("statut", filter.statut);
+  return request(`/frais-acces?${params.toString()}`);
+}
+
+/** Ouverture du ticket du jour — idempotente (rejeu = même ticket, 200). */
+export function ouvrirTicket(body: {
+  patientId: string;
+  structureId?: string;
+  montantXof?: number;
+}): Promise<FraisAccesTicket> {
+  return request<FraisAccesTicket>("/frais-acces", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Encaissement espèces — forward-only (paye terminal, 409 sinon). */
+export function encaisserTicket(
+  id: string,
+  montantXof?: number,
+): Promise<FraisAccesTicket> {
+  return request<FraisAccesTicket>(`/frais-acces/${id}/encaisser`, {
+    method: "POST",
+    body: JSON.stringify({ montantXof }),
+  });
+}
+
+/** Exonération TRACÉE — nature + motif obligatoires, forward-only. */
+export function exonererTicket(
+  id: string,
+  nature: ExonerationNature,
+  motif: string,
+): Promise<FraisAccesTicket> {
+  return request<FraisAccesTicket>(`/frais-acces/${id}/exonerer`, {
+    method: "POST",
+    body: JSON.stringify({ nature, motif }),
+  });
 }
 
 /* ------------------------------- E6 back-office ----------------------- */

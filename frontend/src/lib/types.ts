@@ -28,6 +28,7 @@ export type ViewId =
   | "consultation"
   | "prescriptions"
   | "payments"
+  | "caisse"
   | "sync"
   | "backoffice"
   | "appointments"
@@ -377,6 +378,45 @@ export interface StockItem {
   medicationLabel: string;
   quantity: number;
   seuilAlerte: number;
+}
+
+/* ------------------------------------------------------------------ */
+/* I5 — Frais d'accès : le ticket AVANT la consultation                */
+/* ------------------------------------------------------------------ */
+
+/** Machine forward-only : en_attente → paye | exonere (terminaux). */
+export type FraisAccesStatut = "en_attente" | "paye" | "exonere";
+
+/** Natures d'exonération décidées à la caisse (miroir du CHECK V15). */
+export type ExonerationNature =
+  | "indigent_atteste"
+  | "enfant_moins_5_ans"
+  | "cesarienne"
+  | "grossesse_suivie";
+
+export const EXONERATION_NATURES: { value: ExonerationNature; label: string }[] = [
+  { value: "indigent_atteste", label: "Indigent attesté" },
+  { value: "enfant_moins_5_ans", label: "Enfant de moins de 5 ans" },
+  { value: "cesarienne", label: "Césarienne" },
+  { value: "grossesse_suivie", label: "Grossesse suivie (CPN)" },
+];
+
+/** Ticket d'accès — un par patient × structure × jour (idempotent). */
+export interface FraisAccesTicket {
+  id: string;
+  patientId: string;
+  patientName?: PatientName;
+  structure: string;
+  statut: FraisAccesStatut;
+  montantXof: number;
+  /** Exonération TRACÉE : nature + motif obligatoires (NULL sinon). */
+  exonerationNature?: ExonerationNature;
+  exonerationMotif?: string;
+  exonerationDecideePar?: string;
+  encaissePar?: string;
+  encaisseLe?: string;
+  ouvertPar: string;
+  createdAt: string;
 }
 
 export type StockMouvementType = "reception" | "dispensation" | "contre_entree" | "ajustement";

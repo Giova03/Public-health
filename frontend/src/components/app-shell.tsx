@@ -11,6 +11,7 @@ import {
   ClipboardList,
   CreditCard,
   FileClock,
+  HandCoins,
   LayoutDashboard,
   MoreHorizontal,
   Package,
@@ -35,6 +36,7 @@ import { PatientsView } from "@/modules/patients/view";
 import { ConsultationView } from "@/modules/consultation/view";
 import { PrescriptionsView } from "@/modules/prescriptions/view";
 import { PaymentsView } from "@/modules/payments/view";
+import { CaisseView } from "@/modules/caisse/view";
 import { SyncView } from "@/modules/sync/view";
 import { BackofficeView } from "@/modules/backoffice/view";
 import { AppointmentsView } from "@/modules/appointments/view";
@@ -68,6 +70,7 @@ const NAV_GROUPS: { title: string; items: NavItem[] }[] = [
   {
     title: "Pharmacie & finances",
     items: [
+      { id: "caisse", label: "Caisse", icon: HandCoins, description: "Ticket d'accès : encaissement, exonération" },
       { id: "payments", label: "Paiements", icon: CreditCard, description: "FedaPay : 8 états, réconciliation" },
       { id: "stock", label: "Stock pharmacie", icon: Package, description: "Solde, ruptures, réceptions COCOM" },
     ],
@@ -101,6 +104,7 @@ const VIEWS: Record<ViewId, React.ComponentType> = {
   consultation: ConsultationView,
   prescriptions: PrescriptionsView,
   payments: PaymentsView,
+  caisse: CaisseView,
   sync: SyncView,
   backoffice: BackofficeView,
   appointments: AppointmentsView,

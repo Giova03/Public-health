@@ -175,6 +175,9 @@ export function viewsForRole(role: StaffRole): ViewId[] {
   if (p("consultation:ecrire") || p("consultation:lire")) views.push("consultation");
   if (p("prescription:lire")) views.push("prescriptions");
   if (p("paiement:lire") || p("paiement:initier")) views.push("payments");
+  // I5 : la caisse (ticket d'accès) — paiement:initier pour encaisser/
+  // exonérer, paiement:lire pour la file (superviseur).
+  if (p("paiement:initier") || p("paiement:lire")) views.push("caisse");
   if (p("rendezvous:gerer")) views.push("appointments");
   if (p("stock:gerer")) views.push("stock");
   if (p("reference:gerer")) views.push("references");

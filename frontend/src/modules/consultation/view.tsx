@@ -124,11 +124,22 @@ export function ConsultationView() {
         poidsKg: exam.weight ? Number(exam.weight.replace(",", ".")) : undefined,
       },
     });
-    if (consultResult.status !== "ok") {
+    if (consultResult.status === "error") {
       setSubmitting(false);
+      // I5 : 402 Frais d'accès — le clinicien est renvoyé à la CAISSE,
+      // le parcours monétaire réel du BF (admission → caisse → acte).
+      if (consultResult.code === "FRAIS_ACCES_REQUIS") {
+        toast({
+          title: "Frais d'accès requis — passage à la caisse",
+          description: `${consultResult.message} Le dossier et l'examen restent ouverts : ouvrez le ticket en vue Caisse, puis revenez valider.`,
+          variant: "destructive",
+        });
+        goTo("caisse");
+        return;
+      }
       toast({
         title: "Consultation refusée",
-        description: "message" in consultResult ? consultResult.message : "Erreur",
+        description: consultResult.message,
         variant: "destructive",
       });
       return;

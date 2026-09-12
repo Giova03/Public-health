@@ -17,6 +17,7 @@ import type {
   AuditEntryView,
   ConsultationRecord,
   DispenseEvent,
+  FraisAccesTicket,
   HealthFacility,
   OperationAck,
   Patient,
@@ -54,6 +55,8 @@ interface DemoState {
   stockMouvements: StockMouvement[];
   references: ReferenceFiche[];
   auditLog: AuditEntryView[];
+  /** I5 — tickets d'accès : la caisse AVANT la consultation. */
+  fraisAcces: FraisAccesTicket[];
   /** OTP patients en attente : téléphone → code (5 min côté back). */
   patientOtp: Map<string, string>;
   /** Défis MFA en attente : email → code. */
@@ -194,7 +197,7 @@ function init(): DemoState {
     { id: "u-002", email: "pharmacien@demo.bf", fullName: "Estelle Sanou", role: "PHARMACIEN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
     { id: "u-003", email: "medecin@demo.bf", fullName: "Jean Kiendrebeogo", role: "MEDECIN", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(1) },
     { id: "u-004", email: "pharmacien2@demo.bf", fullName: "Ibrahim Kone", role: "PHARMACIEN", facility: "CHU Yalgado Ouédraogo", mfaEnabled: true, active: true, lastSeenAt: daysAgo(1) },
-    { id: "u-005", email: "caissier@demo.bf", fullName: "Sylvie Bationo", role: "AGENT_FINANCIER", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
+    { id: "u-005", email: "caissier@demo.bf", fullName: "Sylvie Bationo", role: "AGENT_FINANCIER", facility: "CSPS Ouaga 12", mfaEnabled: false, active: true, lastSeenAt: daysAgo(0) },
     { id: "u-006", email: "medecin2@demo.bf", fullName: "Pascal Ouedraogo", role: "MEDECIN", facility: "CMA Kossodo", mfaEnabled: false, active: true, lastSeenAt: daysAgo(2) },
     { id: "u-007", email: "superviseur@demo.bf", fullName: "Chantal Bambara", role: "SUPERVISEUR", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(3) },
     { id: "u-008", email: "admin@demo.bf", fullName: "Roger Compaore", role: "ADMIN", facility: "DRS Centre", mfaEnabled: true, active: true, lastSeenAt: daysAgo(0) },
@@ -310,11 +313,44 @@ function init(): DemoState {
     { date: daysAgo(2), acteur: "u-007", action: "STOCK_ALERTE_SEUIL", entite: "stock", motif: "SRO sous le seuil (30)", resultat: "SUCCESS" },
   ];
 
+  // I5 — tickets d'accès du jour : la file réelle de la caisse du CSPS.
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  const fraisAcces: FraisAccesTicket[] = [
+    {
+      id: "t-001", patientId: "p-005", patientName: { family: "TRAORÉ", given: "Salamata" },
+      structure: "CSPS Ouaga 12", statut: "en_attente", montantXof: 1000,
+      ouvertPar: "u-005", createdAt: new Date().toISOString(),
+    },
+    {
+      id: "t-002", patientId: "p-009", patientName: { family: "OUATTARA", given: "Mariam" },
+      structure: "CSPS Ouaga 12", statut: "en_attente", montantXof: 1000,
+      ouvertPar: "u-005", createdAt: new Date().toISOString(),
+    },
+    {
+      // Enfant de moins de 5 ans (p-004, né 2016-06-08) : la gratuité est
+      // la NORME — le système la trace au lieu de l'ignorer.
+      id: "t-003", patientId: "p-004", patientName: { family: "KABORÉ", given: "Moussa" },
+      structure: "CSPS Ouaga 12", statut: "exonere", montantXof: 1000,
+      exonerationNature: "enfant_moins_5_ans",
+      exonerationMotif: "Enfant de moins de 5 ans — gratuité ciblée (politique nationale)",
+      exonerationDecideePar: "u-005",
+      ouvertPar: "u-005", createdAt: new Date().toISOString(),
+    },
+    {
+      id: "t-004", patientId: "p-007", patientName: { family: "COMPAORÉ", given: "Alice" },
+      structure: "CSPS Ouaga 12", statut: "paye", montantXof: 1000,
+      encaissePar: "u-005", encaisseLe: new Date().toISOString(),
+      ouvertPar: "u-005", createdAt: new Date().toISOString(),
+    },
+  ];
+  void aujourdhui;
+
   return {
     patients, prescriptions, payments, users, facilities, deltaLog,
     phSeqByYear, seenOpIds: new Map(), bootedAt: iso(new Date()),
     consultations, appointments, stockItems, stockMouvements, references,
     auditLog, patientOtp: new Map(), mfaChallenges: new Map(),
+    fraisAcces,
   };
 }
 
@@ -404,6 +440,27 @@ export function findPayment(id: string): PaymentRecord | undefined {
 
 export function addPayment(m: PaymentRecord): void {
   getState().payments.push(m);
+}
+
+/* ------------------------------------------------------------------ */
+/* I5 — frais d'accès : helpers de la caisse                           */
+/* ------------------------------------------------------------------ */
+
+export function findTicket(id: string): FraisAccesTicket | undefined {
+  return getState().fraisAcces.find((t) => t.id === id);
+}
+
+export function addTicket(t: FraisAccesTicket): void {
+  getState().fraisAcces.unshift(t);
+}
+
+/** Le ticket du JOUR (UTC) pour patient × structure — null si absent. */
+export function ticketDuJour(patientId: string, structure: string): FraisAccesTicket | undefined {
+  const aujourdhui = new Date().toISOString().slice(0, 10);
+  return getState().fraisAcces.find(
+    (t) => t.patientId === patientId && t.structure === structure
+      && t.createdAt.slice(0, 10) === aujourdhui,
+  );
 }
 
 /** Transition forward-only ; lève si interdite (contrat E4). */
