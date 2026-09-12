@@ -467,8 +467,20 @@ public class SyncService {
     private ResultatOp conflit(OpBrute op, UUID userId,
                                List<PatientDuplicateException.Candidate> candidats) {
         Map<String, Object> detail = new LinkedHashMap<>();
-        detail.put("reason", "Patient probablement déjà enregistré — voir candidates");
-        detail.put("candidates", candidats);
+        // Suggestion 4 / Q42 — même aveuglement que le 409 REST : les
+        // candidats ne reviennent vers l'appareil qui rejoue l'op que
+        // s'il porte patient:lire (en pratique : jeton de service staff).
+        // Posture ouverte / jeton sans permission → COMPTEUR seul.
+        if (bf.publichealth.common.ContexteAppelant.permission(
+                bf.publichealth.modules.administration.domain.RolesPermissions.PATIENT_LIRE)) {
+            detail.put("reason", "Patient probablement déjà enregistré — voir candidates");
+            detail.put("candidates", candidats);
+        } else {
+            detail.put("reason", "Patient probablement déjà enregistré — candidats masqués "
+                    + "(permission patient:lire requise pour les consulter)");
+            detail.put("candidatesRedacted", true);
+            detail.put("candidatesCount", candidats.size());
+        }
         return persister(new SyncOpEntity(op.opId(), userId, op.entity(), null,
                 SyncOpEntity.CONFLICT, json(detail)));
     }

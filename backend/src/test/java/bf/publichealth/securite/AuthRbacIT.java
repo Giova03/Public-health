@@ -340,8 +340,152 @@ class AuthRbacIT {
     }
 
     // ------------------------------------------------------------------
+    // Suggestion 4 — Q42 : 409 aveuglé + lectures FHIR auditées
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("S4/Q42 : 409 doublons — candidats COMPLETS pour un opérateur patient:lire, création refusée au jeton patient")
+    void doublon409CandidatsCompletsPourOperateur() throws Exception {
+        // agent_saisie : le rôle admission du CSPS — patient:ecrire ET patient:lire.
+        String jeton = login("agent.saisie@demo.bf");
+        String nunp = "NUNP-" + UUID.randomUUID().toString().substring(0, 8);
+        String tel = "+22670" + UUID.randomUUID().toString().substring(0, 6);
+
+        // Un dossier existe déjà (créé par un autre opérateur).
+        String existant = creerPatientAvecNunp(login("infirmier@demo.bf"), nunp, tel);
+
+        // Même identité → 409 avec les candidats EN CLAIR pour l'opérateur
+        // identifié : le contrat UX (ADR-003) est INTACT côté authentifié.
+        mockMvc.perform(post("/api/v1/patients")
+                        .header("Authorization", "Bearer " + jeton)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {"gender":"female","birthDate":"1992-02-20",
+                                         "names":[{"use":"official","family":"TRAORE","given":"Mariam"}],
+                                         "telecoms":[{"system":"phone","value":"%s","use":"mobile"}],
+                                         "identifiers":[{"system":"NUNP","value":"%s"}]}
+                                        """.formatted(tel, nunp)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.candidates").isArray())
+                .andExpect(jsonPath("$.candidates[0].method").value("EXACT"))
+                .andExpect(jsonPath("$.candidates[0].blocking").value(true))
+                .andExpect(jsonPath("$.candidates[0].score").value(1.0))
+                .andExpect(jsonPath("$.candidates[0].id").value(existant))
+                .andExpect(jsonPath("$.candidates[0].phReference").isNotEmpty())
+                // Pas de masquage pour un opérateur autorisé.
+                .andExpect(jsonPath("$.candidatesRedacted").doesNotExist());
+
+        // Et un JETON PATENT n'atteint même PAS la création : le périmètre du
+        // FiltrePermissions le refuse (403) avant le service. La défense est
+        // en profondeur — si le filtre laissait passer, le handler masquerait
+        // quand même (masquage anonyme prouvé en posture ouverte par
+        // PatientIdentityIT.doublonExactParNunp).
+        String telephone = telephoneAleatoire();
+        creerPatient(login("infirmier@demo.bf"), telephone);
+        var demande = mockMvc.perform(post("/api/v1/auth/patient/otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telephone\":\"%s\"}".formatted(telephone)))
+                .andExpect(status().isAccepted())
+                .andReturn();
+        String code = JsonPath.read(demande.getResponse().getContentAsString(), "$.codeDemo");
+        String jetonPatient = JsonPath.read(mockMvc.perform(post("/api/v1/auth/patient/verify")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"telephone\":\"%s\",\"code\":\"%s\"}".formatted(telephone, code)))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.jeton");
+
+        mockMvc.perform(post("/api/v1/patients")
+                        .header("Authorization", "Bearer " + jetonPatient)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {"gender":"female","birthDate":"1992-02-20",
+                                         "names":[{"use":"official","family":"TRAORE","given":"Mariam"}],
+                                         "telecoms":[{"system":"phone","value":"%s","use":"mobile"}],
+                                         "identifiers":[{"system":"NUNP","value":"%s"}]}
+                                        """.formatted(tel, nunp)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.candidates").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("S4 : façade FHIR — chaque lecture réussie est AUDITÉE (FHIR_READ / FHIR_SEARCH)")
+    void fhirLecturesAuditees() throws Exception {
+        String jeton = login("medecin@demo.bf");
+        String famille = "FHIR" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        String patient = creerPatientFamille(jeton, famille);
+
+        // 1. Lecture unitaire : GET /fhir/R4/Patient/{id} → FHIR_READ tracé.
+        mockMvc.perform(get("/fhir/R4/Patient/" + patient)
+                        .header("Authorization", "Bearer " + jeton))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceType").value("Patient"));
+        Integer lectures = jdbc.queryForObject("""
+                SELECT count(*) FROM audit.entry
+                WHERE action = 'FHIR_READ' AND entity = 'fhir_patient'
+                  AND entity_id = ?::uuid
+                """, Integer.class, patient);
+        assertThat(lectures).isGreaterThanOrEqualTo(1);
+
+        // 2. Recherche non vide : GET /fhir/R4/Patient?family=… → FHIR_SEARCH
+        //    avec le nombre de ressources divulguées.
+        mockMvc.perform(get("/fhir/R4/Patient").param("family", famille)
+                        .header("Authorization", "Bearer " + jeton))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceType").value("Bundle"))
+                .andExpect(jsonPath("$.total").value(1));
+        Integer recherches = jdbc.queryForObject("""
+                SELECT count(*) FROM audit.entry
+                WHERE action = 'FHIR_SEARCH' AND entity = 'fhir_patient'
+                  AND details::jsonb ->> 'resultats' = '1'
+                """, Integer.class);
+        assertThat(recherches).isGreaterThanOrEqualTo(1);
+
+        // 3. Bundle VIDE : aucune divulgation → AUCUNE entrée parasite.
+        mockMvc.perform(get("/fhir/R4/Patient").param("family", "INEX" + famille)
+                        .header("Authorization", "Bearer " + jeton))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(0));
+        Integer vides = jdbc.queryForObject("""
+                SELECT count(*) FROM audit.entry
+                WHERE action = 'FHIR_SEARCH' AND entity = 'fhir_patient'
+                  AND details::jsonb ->> 'resultats' = '0'
+                """, Integer.class);
+        assertThat(vides).isZero();
+    }
+
+    // ------------------------------------------------------------------
     // Chargeurs
     // ------------------------------------------------------------------
+
+    /** Création avec NUNP + téléphone explicites (doublon EXACT garanti). */
+    private String creerPatientAvecNunp(String jeton, String nunp, String tel) throws Exception {
+        var result = mockMvc.perform(post("/api/v1/patients")
+                        .header("Authorization", "Bearer " + jeton)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {"gender":"female","birthDate":"1992-02-20",
+                                         "names":[{"use":"official","family":"TRAORE","given":"Mariam"}],
+                                         "telecoms":[{"system":"phone","value":"%s","use":"mobile"}],
+                                         "identifiers":[{"system":"NUNP","value":"%s"}]}
+                                        """.formatted(tel, nunp)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return JsonPath.read(result.getResponse().getContentAsString(), "$.id");
+    }
+
+    /** Création avec un patronyme arbitraire (recherche FHIR ciblée). */
+    private String creerPatientFamille(String jeton, String famille) throws Exception {
+        var result = mockMvc.perform(post("/api/v1/patients")
+                        .header("Authorization", "Bearer " + jeton)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                        {"gender":"male","birthDate":"1988-05-17",
+                                         "names":[{"use":"official","family":"%s","given":"Amadou"}]}
+                                        """.formatted(famille)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        return JsonPath.read(result.getResponse().getContentAsString(), "$.id");
+    }
 
     private String creerPatient(String jeton, String telephone) throws Exception {
         String alea = UUID.randomUUID().toString().replace("-", "");

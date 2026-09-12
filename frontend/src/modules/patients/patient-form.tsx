@@ -152,6 +152,20 @@ export function PatientFormDialog({
     const result = await createPatient(input);
     switch (result.status) {
       case "conflict":
+        // Suggestion 4 / Q42 : 409 masqué (appelant sans patient:lire) —
+        // pas de dialogue de doublons (aucune donnée sensible reçue),
+        // un message honnête qui invite à faire examiner par l'admission.
+        if (result.redacted) {
+          toast({
+            variant: "destructive",
+            title: "Doublon probable — candidats masqués",
+            description:
+              result.count !== undefined
+                ? `${result.count} dossier(s) proche(s) existe(nt) déjà, mais votre rôle ne permet pas de les examiner (permission patient:lire requise).`
+                : "Des dossiers proches existent déjà, mais votre rôle ne permet pas de les examiner (permission patient:lire requise).",
+          });
+          break;
+        }
         onConflict(input, result.candidates);
         break;
       case "created":

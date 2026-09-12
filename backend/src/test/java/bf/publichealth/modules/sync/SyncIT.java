@@ -346,7 +346,7 @@ class SyncIT {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Doublon patient → CONFLICT + candidats dans detail, le lot continue")
+    @DisplayName("Doublon patient → CONFLICT + candidats MASQUÉS en posture ouverte (S4/Q42), le lot continue")
     void doublonConflitLeLotContinue() throws Exception {
         String telephone = "+22670" + UUID.randomUUID().toString().substring(0, 6);
         String existant = creerPatient("TAPSOBA", "Roukiata", "1994-06-18", telephone);
@@ -360,12 +360,17 @@ class SyncIT {
         assertThat((String) JsonPath.read(reponse, "$.results[0].result")).isEqualTo("CONFLICT");
         assertThat((String) JsonPath.read(reponse, "$.results[0].detail.reason"))
                 .contains("déjà enregistré");
-        assertThat((Integer) JsonPath.read(reponse, "$.results[0].detail.candidates.length()"))
+        // Suggestion 4 / Q42 : en posture ouverte (uplink anonyme), l'appareil
+        // reçoit le COMPTEUR, pas les dossiers. Le contrat complet (candidats
+        // embarqués pour un jeton staff portant patient:lire) vit côté
+        // authentifié — AuthRbacIT.doublon409CandidatsCompletsPourOperateur ;
+        // les deux voies partagent la même résolution ContexteAppelant.permission.
+        assertThat((Boolean) JsonPath.read(reponse, "$.results[0].detail.candidatesRedacted"))
+                .isTrue();
+        assertThat((Integer) JsonPath.read(reponse, "$.results[0].detail.candidatesCount"))
                 .isGreaterThanOrEqualTo(1);
-        assertThat((String) JsonPath.read(reponse, "$.results[0].detail.candidates[0].id"))
-                .isEqualTo(existant);
-        assertThat((String) JsonPath.read(reponse, "$.results[0].detail.candidates[0].phReference"))
-                .isNotBlank();
+        // Défense : aucun tableau de candidats ne fuit dans la réponse.
+        assertThat(reponse).doesNotContain("\"candidates\":[");
 
         // Le reste du lot s'applique malgré le conflit.
         assertThat((String) JsonPath.read(reponse, "$.results[1].result")).isEqualTo("APPLIED");

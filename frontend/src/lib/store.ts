@@ -68,7 +68,13 @@ import {
 export type CreatePatientResult =
   | { status: "created" | "replayed"; patient: Patient }
   | { status: "queued"; patient: Patient }
-  | { status: "conflict"; candidates: DuplicateCandidate[] }
+  | {
+      status: "conflict";
+      candidates: DuplicateCandidate[];
+      /** Suggestion 4 / Q42 : candidats masqués (appelant sans patient:lire). */
+      redacted: boolean;
+      count?: number;
+    }
   | { status: "error"; message: string };
 
 export type MutationResult =
@@ -554,7 +560,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...(opts?.forceCreate ? { forceCreate: true, reason: opts.reason } : {}),
       });
       if (result.status === "conflict") {
-        return { status: "conflict", candidates: result.candidates };
+        return {
+          status: "conflict",
+          candidates: result.candidates,
+          redacted: result.redacted,
+          count: result.count,
+        };
       }
       await db.putMirror("patient", result.patient);
       set((s) => ({

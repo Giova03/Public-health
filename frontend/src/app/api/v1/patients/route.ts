@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { exigerPermission } from "@/lib/demo/guard";
+import { roleHasPermission } from "@/lib/rbac";
 import type { ConflictPatientBody, CreatePatientInput, Patient } from "@/lib/types";
 import { findDuplicates, normalize } from "@/lib/demo/matcher";
 import {
@@ -56,6 +57,10 @@ interface CreateBody extends CreatePatientInput {
 export async function POST(request: NextRequest) {
   const garde = exigerPermission(request, "patient:ecrire");
   if (garde.refus) return garde.refus;
+  // Rôle de l'appelant (Suggestion 4 / Q42 — aveuglement du 409) :
+  // le token est résolu par la garde, on s'en sert pour masquer les
+  // candidats si le rôle ne porte PAS patient:lire.
+  const { token } = garde;
   let body: CreateBody;
   try {
     body = (await request.json()) as CreateBody;
@@ -95,6 +100,32 @@ export async function POST(request: NextRequest) {
     );
 
     if (candidates.length > 0) {
+      // Suggestion 4 / Q42 — miroir exact du backend : les candidats
+      // (identité, téléphone, NUNP) ne voyagent QUE pour un rôle portant
+      // AUSSI patient:lire. Défense en profondeur — aujourd'hui tous les
+      // rôles patient:ecrire portent patient:lire, mais le masquage
+      // s'appliquerait automatiquement si la matrice divergeait.
+      if (token.role === "patient" || !roleHasPermission(token.role, "patient:lire")) {
+        getState().auditLog.unshift({
+          date: new Date().toISOString(),
+          acteur: token.sub,
+          action: "PATIENT_DUPLICATE_REDACTED",
+          entite: "patient",
+          motif: `CANDIDATS_MASQUES_APPELANT_SANS_PATIENT_LIRE (${candidates.length} candidat(s))`,
+          resultat: "DENIED",
+        });
+        return NextResponse.json(
+          {
+            title: "Dossiers similaires détectés",
+            detail:
+              "Des dossiers proches existent déjà, mais les candidats sont MASQUÉS : la permission patient:lire est requise pour les examiner.",
+            status: 409,
+            candidatesRedacted: true,
+            candidatesCount: candidates.length,
+          },
+          { status: 409, headers: { "cache-control": "no-store" } },
+        );
+      }
       const conflict: ConflictPatientBody = {
         title: "Dossiers similaires détectés",
         detail:

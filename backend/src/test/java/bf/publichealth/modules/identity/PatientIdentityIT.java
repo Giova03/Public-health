@@ -194,7 +194,7 @@ class PatientIdentityIT {
     // ------------------------------------------------------------------
 
     @Test
-    @DisplayName("Doublon EXACT par NUNP national partagé : 409, candidat embarqué, rien créé")
+    @DisplayName("Doublon EXACT par NUNP national partagé : 409, candidats MASQUÉS pour un anonyme (Q42), rien créé")
     void doublonExactParNunp() throws Exception {
         String nunp = "NUNP-" + UUID.randomUUID().toString().substring(0, 8);
         creer("TRAORE", "Mariam", "1992-02-20", "+22670998877", nunp);
@@ -206,15 +206,25 @@ class PatientIdentityIT {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.title")
                         .value("Patient probablement déjà enregistré"))
-                .andExpect(jsonPath("$.candidates").isArray())
-                .andExpect(jsonPath("$.candidates[0].method").value("EXACT"))
-                .andExpect(jsonPath("$.candidates[0].blocking").value(true))
-                .andExpect(jsonPath("$.candidates[0].score").value(1.0))
-                .andExpect(jsonPath("$.candidates[0].phReference").isNotEmpty());
+                // Suggestion 4 / Q42 : en posture ouverte (anonyme), les candidats
+                // ne fuient PLUS — compteur seul. Le contrat UX complet (candidats
+                // embarqués) vit désormais côté authentifié (AuthRbacIT,
+                // doublon409CandidatsCompletsPourOperateur).
+                .andExpect(jsonPath("$.candidatesRedacted").value(true))
+                .andExpect(jsonPath("$.candidatesCount").value(1))
+                .andExpect(jsonPath("$.candidates").doesNotExist());
+
+        // Le MASQUAGE lui-même est tracé (défense en profondeur visible
+        // dans la chaîne d'audit, avec le compteur).
+        Integer masques = jdbc.queryForObject("""
+                SELECT count(*) FROM audit.entry
+                WHERE action = 'PATIENT_DUPLICATE_REDACTED' AND result = 'DENIED'
+                """, Integer.class);
+        assertThat(masques).isGreaterThanOrEqualTo(1);
     }
 
     @Test
-    @DisplayName("Zone grise PROBABILISTIC : patronyme identique, prénoms proches, même naissance")
+    @DisplayName("Zone grise PROBABILISTIC : 409 anonyme masqué, la détection reste tracée en audit")
     void doublonZoneGrise() throws Exception {
         creer("OUEDRAOGO", "Aminata", "1995-04-08", null, null);
 
@@ -223,8 +233,17 @@ class PatientIdentityIT {
                         .content(corpsPatient("OUEDRAOGO", "Aminatou", "1995-04-08",
                                 null, null, UUID.randomUUID(), false, null)))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.candidates[0].method").value("PROBABILISTIC"))
-                .andExpect(jsonPath("$.candidates[0].blocking").value(false));
+                .andExpect(jsonPath("$.candidatesRedacted").value(true))
+                .andExpect(jsonPath("$.candidates").doesNotExist());
+
+        // La méthode PROBABILISTIC reste prouvée : l'entrée de détection
+        // du service porte la méthode du meilleur candidat (sans PII).
+        Integer detectes = jdbc.queryForObject("""
+                SELECT count(*) FROM audit.entry
+                WHERE action = 'PATIENT_DUPLICATE_DETECTED'
+                  AND details::jsonb ->> 'method' = 'PROBABILISTIC'
+                """, Integer.class);
+        assertThat(detectes).isGreaterThanOrEqualTo(1);
     }
 
     @Test

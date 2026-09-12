@@ -107,12 +107,16 @@ export interface CreatePatientInput {
   village?: string;
 }
 
-/** Réponse 409 ProblemDetail — propriété `candidates` embarquée. */
+/** Réponse 409 ProblemDetail — candidats EMBARQUÉS ou MASQUÉS (S4/Q42). */
 export interface ConflictPatientBody {
   title: string;
   detail: string;
   status: 409;
-  candidates: DuplicateCandidate[];
+  /** Candidats complets — uniquement pour un appelant portant patient:lire. */
+  candidates?: DuplicateCandidate[];
+  /** Contrat masqué (anonyme / rôle sans patient:lire) : compteur seul. */
+  candidatesRedacted?: boolean;
+  candidatesCount?: number;
 }
 
 /* ------------------------------------------------------------------ */

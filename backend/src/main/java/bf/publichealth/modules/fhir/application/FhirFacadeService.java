@@ -18,6 +18,9 @@ import org.hl7.fhir.r4.model.Observation;
 import org.hl7.fhir.r4.model.Patient;
 import org.springframework.stereotype.Service;
 
+import bf.publichealth.common.ContexteAppelant;
+import bf.publichealth.modules.audit.adapter.persistence.AuditEntryEntity;
+import bf.publichealth.modules.audit.application.AuditRecorder;
 import bf.publichealth.modules.fhir.application.LectureCliniqueFhir.ConditionFhir;
 import bf.publichealth.modules.fhir.application.LectureCliniqueFhir.EncounterFhir;
 import bf.publichealth.modules.fhir.application.LectureCliniqueFhir.ObservationFhir;
@@ -37,6 +40,12 @@ import bf.publichealth.modules.fhir.domain.RessourceIntrouvableException;
  * <p>Zéro écriture, zéro JOIN inter-schémas, zéro donnée inventée. Les
  * identifiants de recherche de type référence acceptent la forme brute
  * (uuid) ou {@code Patient/<uuid>} — convention FHIR.</p>
+ *
+ * <p>Suggestion 4 de l'audit de fidélité : « la façade FHIR n'audit
+ * RIEN » — chaque lecture réussie (read ou search non vide) inscrit
+ * désormais FHIR_READ / FHIR_SEARCH dans la chaîne d'audit append-only,
+ * avec l'acteur du jeton. Qui a consulté quel dossier par la façade
+ * interop est désormais traçable comme pour l'API MPI (PATIENT_READ).</p>
  */
 @Service
 public class FhirFacadeService {
@@ -64,13 +73,36 @@ public class FhirFacadeService {
     private final LectureCliniqueFhir clinique;
     private final LecturePrescriptionsFhir prescriptions;
     private final FhirBundleFactory bundles;
+    private final AuditRecorder auditRecorder;
 
     public FhirFacadeService(LecturePatientsFhir patients, LectureCliniqueFhir clinique,
-                             LecturePrescriptionsFhir prescriptions, FhirBundleFactory bundles) {
+                             LecturePrescriptionsFhir prescriptions, FhirBundleFactory bundles,
+                             AuditRecorder auditRecorder) {
         this.patients = patients;
         this.clinique = clinique;
         this.prescriptions = prescriptions;
         this.bundles = bundles;
+        this.auditRecorder = auditRecorder;
+    }
+
+    // ------------------------------------------------------------------
+    // Audit des lectures (suggestion 4) — FHIR_READ / FHIR_SEARCH
+    // ------------------------------------------------------------------
+
+    /** Lecture unitaire divulguée : ressource, identifiant, acteur du jeton. */
+    private void tracerRead(String entite, UUID entityId) {
+        auditRecorder.record(ContexteAppelant.acteur(), "FHIR_READ", entite, entityId,
+                null, null, AuditEntryEntity.Result.SUCCESS, null);
+    }
+
+    /** Recherche non vide : le sujet (patient) + le nombre de ressources divulguées. */
+    private void tracerSearch(String entite, UUID patientId, long resultats) {
+        if (resultats <= 0) {
+            return; // Bundle vide : aucune donnée divulguée, pas d'entrée.
+        }
+        auditRecorder.record(ContexteAppelant.acteur(), "FHIR_SEARCH", entite, patientId,
+                null, null, AuditEntryEntity.Result.SUCCESS,
+                Map.of("resultats", resultats));
     }
 
     // ------------------------------------------------------------------
@@ -84,6 +116,7 @@ public class FhirFacadeService {
         if (source.masterId() != null) {
             throw new DossierFusionneException(source.id(), source.masterId());
         }
+        tracerRead("fhir_patient", id);
         return FhirMappers.versPatient(source);
     }
 
@@ -128,6 +161,7 @@ public class FhirFacadeService {
         List<Patient> ressources = resultat.elements().stream()
                 .map(FhirMappers::versPatient)
                 .toList();
+        tracerSearch("fhir_patient", null, resultat.total());
         return bundles.searchset(baseUrl, "/Patient", parametres, ressources,
                 resultat.total(), page);
     }
@@ -137,8 +171,10 @@ public class FhirFacadeService {
     // ------------------------------------------------------------------
 
     public Encounter lireEncounter(UUID id) {
-        return FhirMappers.versEncounter(clinique.encounterParId(id)
-                .orElseThrow(() -> new RessourceIntrouvableException("Encounter", id)));
+        EncounterFhir source = clinique.encounterParId(id)
+                .orElseThrow(() -> new RessourceIntrouvableException("Encounter", id));
+        tracerRead("fhir_encounter", id);
+        return FhirMappers.versEncounter(source);
     }
 
     public Bundle rechercherEncounters(String patientBrut, FhirPagination page, String baseUrl) {
@@ -150,6 +186,7 @@ public class FhirFacadeService {
         List<Encounter> ressources = resultat.elements().stream()
                 .map(FhirMappers::versEncounter)
                 .toList();
+        tracerSearch("fhir_encounter", patientId, resultat.total());
         return bundles.searchset(baseUrl, "/Encounter", parametres, ressources,
                 resultat.total(), page);
     }
@@ -159,8 +196,10 @@ public class FhirFacadeService {
     // ------------------------------------------------------------------
 
     public Observation lireObservation(UUID id) {
-        return FhirMappers.versObservation(clinique.observationParId(id)
-                .orElseThrow(() -> new RessourceIntrouvableException("Observation", id)));
+        ObservationFhir source = clinique.observationParId(id)
+                .orElseThrow(() -> new RessourceIntrouvableException("Observation", id));
+        tracerRead("fhir_observation", id);
+        return FhirMappers.versObservation(source);
     }
 
     public Bundle rechercherObservations(String patientBrut, String encounterBrut,
@@ -185,6 +224,7 @@ public class FhirFacadeService {
         List<Observation> ressources = resultat.elements().stream()
                 .map(FhirMappers::versObservation)
                 .toList();
+        tracerSearch("fhir_observation", patientId, resultat.total());
         return bundles.searchset(baseUrl, "/Observation", parametres, ressources,
                 resultat.total(), page);
     }
@@ -194,8 +234,10 @@ public class FhirFacadeService {
     // ------------------------------------------------------------------
 
     public Condition lireCondition(UUID id) {
-        return FhirMappers.versCondition(clinique.conditionParId(id)
-                .orElseThrow(() -> new RessourceIntrouvableException("Condition", id)));
+        ConditionFhir source = clinique.conditionParId(id)
+                .orElseThrow(() -> new RessourceIntrouvableException("Condition", id));
+        tracerRead("fhir_condition", id);
+        return FhirMappers.versCondition(source);
     }
 
     public Bundle rechercherConditions(String patientBrut, FhirPagination page, String baseUrl) {
@@ -207,6 +249,7 @@ public class FhirFacadeService {
         List<Condition> ressources = resultat.elements().stream()
                 .map(FhirMappers::versCondition)
                 .toList();
+        tracerSearch("fhir_condition", patientId, resultat.total());
         return bundles.searchset(baseUrl, "/Condition", parametres, ressources,
                 resultat.total(), page);
     }
@@ -218,6 +261,7 @@ public class FhirFacadeService {
     public MedicationRequest lireMedicationRequest(UUID ligneId) {
         LecturePrescriptionsFhir.LigneAvecPrescription source = prescriptions.ligneParId(ligneId)
                 .orElseThrow(() -> new RessourceIntrouvableException("MedicationRequest", ligneId));
+        tracerRead("fhir_medication_request", ligneId);
         return FhirMappers.versMedicationRequest(source.prescription(), source.ligne());
     }
 
@@ -263,6 +307,7 @@ public class FhirFacadeService {
         if (statut != null) {
             parametres.put("status", statut);
         }
+        tracerSearch("fhir_medication_request", patientId, filtree.size());
         return bundles.searchset(baseUrl, "/MedicationRequest", parametres, pageCourante,
                 filtree.size(), page);
     }

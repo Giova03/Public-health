@@ -130,7 +130,13 @@ export async function createPatient(
   body: CreatePatientBody,
 ): Promise<
   | { status: "created" | "replayed"; patient: Patient }
-  | { status: "conflict"; candidates: DuplicateCandidate[] }
+  | {
+      status: "conflict";
+      candidates: DuplicateCandidate[];
+      /** Suggestion 4 / Q42 : 409 masqué pour un appelant sans patient:lire. */
+      redacted: boolean;
+      count?: number;
+    }
 > {
   try {
     const res = await request<{ patient: Patient; replayed?: boolean }>(
@@ -143,6 +149,10 @@ export async function createPatient(
       return {
         status: "conflict",
         candidates: (error.body.candidates as DuplicateCandidate[]) ?? [],
+        redacted: error.body.candidatesRedacted === true,
+        count: typeof error.body.candidatesCount === "number"
+          ? error.body.candidatesCount
+          : undefined,
       };
     }
     throw error;

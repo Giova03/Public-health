@@ -20,7 +20,7 @@
 #   GH_TOKEN=ghp_xxxx OWNER=mon-compte REPO=public-health bash scripts/push-to-github.sh
 set -euo pipefail
 
-REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+REPO_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_DIR"
 
 : "${GH_TOKEN:?GH_TOKEN manquant (scopes: repo) - passez un PAT GitHub via la variable GH_TOKEN}"
