@@ -46,6 +46,7 @@ export function ConsultationView() {
   const simulatedOnline = useAppStore((s) => s.simulatedOnline);
   const createPrescription = useAppStore((s) => s.createPrescription);
   const createConsultation = useAppStore((s) => s.createConsultation);
+  const commanderExamen = useAppStore((s) => s.commanderExamen);
   const user = useCurrentUser();
 
   const [step, setStep] = useState(0);
@@ -143,6 +144,13 @@ export function ConsultationView() {
         variant: "destructive",
       });
       return;
+    }
+
+    // P1-8 : les examens de laboratoire commandés partent AVEC l'acte —
+    // la preuve derrière le diagnostic (TDR, Hb…).
+    const consultationId = consultResult.status === "ok" ? consultResult.consultationId : undefined;
+    for (const type of exam.examensCommandes) {
+      await commanderExamen(patient.id, type, consultationId);
     }
 
     const items: PrescriptionItem[] = lines.map((l) => ({

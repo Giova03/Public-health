@@ -1,6 +1,6 @@
 "use client";
 
-import { HeartPulse, NotebookPen, Scale, Stethoscope, Thermometer } from "lucide-react";
+import { FlaskConical, HeartPulse, NotebookPen, Scale, Stethoscope, Thermometer } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { DIAGNOSES } from "@/lib/demo/reference";
+import { TYPES_EXAMENS } from "@/lib/types";
 import { OTHER_DIAGNOSIS, type ExamDraft } from "../helpers";
 
 /**
@@ -188,6 +189,43 @@ export function ExamStep({ exam, onChange }: ExamStepProps) {
           placeholder="Observations, antécédents, conduite à tenir…"
         />
       </div>
+
+      {/* P1-8 — examens de laboratoire : la preuve derrière le diagnostic. */}
+      <fieldset className="rounded-lg border bg-muted/30 p-3">
+        <legend className="px-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Laboratoire — examens à commander
+        </legend>
+        <div className="grid grid-cols-2 gap-2">
+          {TYPES_EXAMENS.slice(0, 4).map((examen) => {
+            const coche = exam.examensCommandes.includes(examen.value);
+            return (
+              <label
+                key={examen.value}
+                className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-primary"
+                  checked={coche}
+                  onChange={(e) =>
+                    onChange({
+                      examensCommandes: e.target.checked
+                        ? [...exam.examensCommandes, examen.value]
+                        : exam.examensCommandes.filter((t) => t !== examen.value),
+                    })
+                  }
+                />
+                <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                {examen.label}
+              </label>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          La commande part avec l&apos;acte clinique — le résultat se saisit
+          dans le dossier patient (forward-only : jamais réécrit).
+        </p>
+      </fieldset>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import type {
   AuditEntryView,
   ConsultationRecord,
   DispenseEvent,
+  ExamenLaboRecord,
   FraisAccesTicket,
   HealthFacility,
   OperationAck,
@@ -57,6 +58,8 @@ interface DemoState {
   auditLog: AuditEntryView[];
   /** I5 — tickets d'accès : la caisse AVANT la consultation. */
   fraisAcces: FraisAccesTicket[];
+  /** P1-8 — examens de laboratoire : la preuve derrière le diagnostic. */
+  examens: ExamenLaboRecord[];
   /** OTP patients en attente : téléphone → code (5 min côté back). */
   patientOtp: Map<string, string>;
   /** Défis MFA en attente : email → code. */
@@ -345,12 +348,29 @@ function init(): DemoState {
   ];
   void aujourdhui;
 
+  // P1-8 — examens de laboratoire : la preuve derrière le diagnostic.
+  // c-001 embarque déjà un TDR résulté (seed consultations) ; ici le
+  // registre autonome du labo, avec une commande en attente de résultat.
+  const examens: ExamenLaboRecord[] = [
+    {
+      id: "e-001", patientId: "p-001", consultationId: "c-001",
+      structure: "CSPS Ouaga 12", type: "tdr_paludisme", statut: "resultat",
+      resultatText: "TDR positif", resultatPositif: true,
+      demandePar: "u-003", createdAt: daysAgo(9), resultatLe: daysAgo(9),
+    },
+    {
+      id: "e-002", patientId: "p-009", consultationId: undefined,
+      structure: "CSPS Ouaga 12", type: "hemoglobine", statut: "commande",
+      demandePar: "u-001", createdAt: daysAgo(0),
+    },
+  ];
+
   return {
     patients, prescriptions, payments, users, facilities, deltaLog,
     phSeqByYear, seenOpIds: new Map(), bootedAt: iso(new Date()),
     consultations, appointments, stockItems, stockMouvements, references,
     auditLog, patientOtp: new Map(), mfaChallenges: new Map(),
-    fraisAcces,
+    fraisAcces, examens,
   };
 }
 

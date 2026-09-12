@@ -421,6 +421,38 @@ export interface FraisAccesTicket {
 
 export type StockMouvementType = "reception" | "dispensation" | "contre_entree" | "ajustement";
 
+/* ------------------------------------------------------------------ */
+/* P1-8 — Laboratoire minimal : TDR lié au diagnostic                  */
+/* ------------------------------------------------------------------ */
+
+/** Machine : commande → resultat (terminal, forward-only côté back). */
+export type ExamenStatut = "commande" | "resultat";
+
+/** Types d'examens réels d'un CSPS (miroir du référentiel backend). */
+export const TYPES_EXAMENS: { value: string; label: string }[] = [
+  { value: "tdr_paludisme", label: "TDR paludisme" },
+  { value: "goutte_epaisse", label: "Goutte épaisse" },
+  { value: "hemoglobine", label: "Hémoglobine (Hb)" },
+  { value: "glycemie", label: "Glycémie" },
+  { value: "test_grossesse", label: "Test de grossesse" },
+  { value: "urine_analyse", label: "Analyse d'urine" },
+];
+
+/** Examen de laboratoire — la preuve derrière le diagnostic (P1-8). */
+export interface ExamenLaboRecord {
+  id: string;
+  patientId: string;
+  consultationId?: string;
+  structure: string;
+  type: string;
+  statut: ExamenStatut;
+  resultatText?: string;
+  resultatPositif?: boolean;
+  demandePar: string;
+  createdAt: string;
+  resultatLe?: string;
+}
+
 export interface StockMouvement {
   id: string;
   medicationCode: string;

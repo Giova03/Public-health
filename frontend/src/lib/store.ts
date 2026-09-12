@@ -16,6 +16,7 @@ import type {
   ConsultationConstantes,
   ConsultationRecord,
   ExonerationNature,
+  ExamenLaboRecord,
   FraisAccesTicket,
   ReferenceFiche,
   SnisStats,
@@ -37,6 +38,7 @@ import type {
 import { uuidV7 } from "@/lib/uuid";
 import * as db from "@/lib/offline/db";
 import {
+  commanderExamen as apiCommanderExamen,
   createAppointment as apiCreateAppointment,
   createConsultation as apiCreateConsultation,
   createReference as apiCreateReference,
@@ -49,9 +51,11 @@ import {
   listAppointments as apiListAppointments,
   listAuditEntries as apiListAudit,
   listConsultations as apiListConsultations,
+  listExamens as apiListExamens,
   listFraisAcces as apiListFraisAcces,
   listReferences as apiListReferences,
   ouvrirTicket as apiOuvrirTicket,
+  resultatExamen as apiResultatExamen,
   transitionAppointment as apiTransitionAppointment,
   transitionReference as apiTransitionReference,
 } from "@/lib/api-client";
@@ -120,6 +124,8 @@ interface AppState {
   snis: SnisStats | null;
   /** I5 — tickets d'accès : la caisse AVANT la consultation. */
   fraisAcces: FraisAccesTicket[];
+  /** P1-8 — examens de laboratoire : la preuve derrière le diagnostic. */
+  examens: ExamenLaboRecord[];
 
   /* Outbox & protocole E2 */
   outbox: SyncOperation[];
@@ -178,7 +184,7 @@ interface AppState {
     diagnosticLabel?: string;
     notes?: string;
     constantes?: ConsultationConstantes;
-  }) => Promise<MutationResult>;
+  }) => Promise<{ status: "ok"; consultationId: string } | { status: "error"; message: string; code?: "FRAIS_ACCES_REQUIS" } | { status: "queued" }>;
   loadConsultations: (patientId: string) => Promise<void>;
   createAppointment: (payload: {
     patientId?: string;
@@ -225,6 +231,10 @@ interface AppState {
   ouvrirTicket: (patientId: string, structureId: string, montantXof?: number) => Promise<MutationResult>;
   encaisserTicket: (id: string, montantXof?: number) => Promise<MutationResult>;
   exonererTicket: (id: string, nature: ExonerationNature, motif: string) => Promise<MutationResult>;
+  /* P1-8 — laboratoire minimal : TDR + résultat lié au diagnostic. */
+  loadExamens: (patientId?: string) => Promise<void>;
+  commanderExamen: (patientId: string, type: string, consultationId?: string) => Promise<MutationResult>;
+  enregistrerResultatExamen: (id: string, resultatText: string, resultatPositif?: boolean) => Promise<MutationResult>;
 }
 
 /* --------------------------- Helpers internes ------------------------- */
@@ -296,6 +306,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   users: [],
   facilities: [],
   fraisAcces: [],
+  examens: [],
 
   outbox: [],
   syncLog: [],
@@ -948,7 +959,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const consultation = await apiCreateConsultation(payload);
       set((s) => ({ consultations: [consultation, ...s.consultations] }));
-      return { status: "ok" };
+      return { status: "ok" as const, consultationId: consultation.id };
     } catch (error) {
       // I5 : le 402 Frais d'accès renvoie le clinicien à la CAISSE —
       // le parcours monétaire réel du BF, porté jusqu'à l'UI.
@@ -1214,6 +1225,64 @@ export const useAppStore = create<AppState>((set, get) => ({
       const ticket = await apiExonererTicket(id, nature, motif);
       set((s) => ({
         fraisAcces: s.fraisAcces.map((t) => (t.id === id ? ticket : t)),
+      }));
+      return { status: "ok" as const };
+    } catch (error) {
+      return {
+        status: "error" as const,
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  /* -------------- P1-8 — laboratoire (examens + résultats) ------------- */
+
+  loadExamens: async (patientId) => {
+    if (!get().isOnline()) return;
+    try {
+      const examens = await apiListExamens(patientId);
+      set({ examens });
+    } catch {
+      /* miroir inchangé */
+    }
+  },
+
+  commanderExamen: async (patientId, type, consultationId) => {
+    try {
+      const examen = await apiCommanderExamen({ patientId, type, consultationId });
+      set((s) => ({
+        examens: [examen, ...s.examens],
+        // Miroir embarqué : la consultation affiche l'examen commandé.
+        consultations: consultationId
+          ? s.consultations.map((c) => c.id === consultationId
+            ? { ...c, examens: [...c.examens, { id: examen.id, type: examen.type, statut: "commande" }] }
+            : c)
+          : s.consultations,
+      }));
+      return { status: "ok" as const };
+    } catch (error) {
+      return {
+        status: "error" as const,
+        message: error instanceof Error ? error.message : "Erreur inconnue",
+      };
+    }
+  },
+
+  enregistrerResultatExamen: async (id, resultatText, resultatPositif) => {
+    try {
+      const examen = await apiResultatExamen(id, resultatText, resultatPositif);
+      set((s) => ({
+        examens: s.examens.map((e) => (e.id === id ? examen : e)),
+        consultations: examen.consultationId
+          ? s.consultations.map((c) => c.id === examen.consultationId
+            ? {
+                ...c,
+                examens: c.examens.map((e) => e.id === id
+                  ? { ...e, statut: "resultat", resultat: examen.resultatText, positif: examen.resultatPositif }
+                  : e),
+              }
+            : c)
+          : s.consultations,
       }));
       return { status: "ok" as const };
     } catch (error) {

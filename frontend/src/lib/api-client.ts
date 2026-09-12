@@ -29,6 +29,7 @@ import type {
   DispenseLine,
   DuplicateCandidate,
   ExonerationNature,
+  ExamenLaboRecord,
   FraisAccesTicket,
   OperationAck,
   Patient,
@@ -338,6 +339,43 @@ export function exonererTicket(
     method: "POST",
     body: JSON.stringify({ nature, motif }),
   });
+}
+
+/* ------------------- P1-8 examens de laboratoire ----------------------- */
+
+/** Commande d'examen (laboratoire:ecrire) — 201. */
+export function commanderExamen(body: {
+  patientId: string;
+  consultationId?: string;
+  type: string;
+}): Promise<ExamenLaboRecord> {
+  return request<ExamenLaboRecord>("/examens", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+/** Enregistrement du résultat — forward-only (409 sur re-résultat). */
+export function resultatExamen(
+  id: string,
+  resultatText: string,
+  resultatPositif?: boolean,
+): Promise<ExamenLaboRecord> {
+  return request<ExamenLaboRecord>(`/examens/${id}/resultat`, {
+    method: "POST",
+    body: JSON.stringify({ resultatText, resultatPositif }),
+  });
+}
+
+/** Liste par patient / statut (consultation:lire, périmètre patient). */
+export async function listExamens(patientId?: string, statut?: string): Promise<ExamenLaboRecord[]> {
+  const params = new URLSearchParams();
+  if (patientId) params.set("patientId", patientId);
+  if (statut) params.set("statut", statut);
+  const reponse = await request<{ examens: ExamenLaboRecord[] }>(
+    `/examens?${params.toString()}`,
+  );
+  return reponse.examens;
 }
 
 /* ------------------------------- E6 back-office ----------------------- */

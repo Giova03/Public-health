@@ -7,23 +7,25 @@
  */
 
 import { useEffect } from "react";
-import { Activity, FileWarning, Stethoscope } from "lucide-react";
+import { Activity, FileWarning, FlaskConical, Stethoscope } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { usePermission } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Patient } from "@/lib/types";
+import { TYPES_EXAMENS, type Patient } from "@/lib/types";
 
 export function ConsultationHistory({ patient }: { patient: Patient }) {
   const consultations = useAppStore((s) => s.consultations);
   const loadConsultations = useAppStore((s) => s.loadConsultations);
   const declareDeath = useAppStore((s) => s.declareDeath);
   const createReference = useAppStore((s) => s.createReference);
+  const enregistrerResultatExamen = useAppStore((s) => s.enregistrerResultatExamen);
   const goTo = useAppStore((s) => s.goTo);
   const peutEcrire = usePermission("consultation:ecrire");
   const peutReferer = usePermission("reference:gerer");
+  const peutLabo = usePermission("laboratoire:ecrire");
   const { toast } = useToast();
 
   useEffect(() => {
@@ -64,6 +66,26 @@ export function ConsultationHistory({ patient }: { patient: Patient }) {
     } else {
       toast({ title: "Refusé", description: "message" in resultat ? resultat.message : "Erreur", variant: "destructive" });
     }
+  }
+
+  /** P1-8 — saisie du résultat de laboratoire (forward-only). */
+  async function saisirResultat(examenId: string) {
+    const texte = window.prompt("Résultat (OBLIGATOIRE — ex. « TDR positif », « Hb 11,2 g/dL ») :");
+    if (!texte?.trim()) return;
+    const positifBrut = window.prompt("Positif ? (oui / non / laisser vide si non applicable) :");
+    const positif = positifBrut?.trim().toLowerCase() === "oui"
+      ? true
+      : positifBrut?.trim().toLowerCase() === "non"
+        ? false
+        : undefined;
+    const resultat = await enregistrerResultatExamen(examenId, texte.trim(), positif);
+    toast({
+      title: resultat.status === "ok" ? "Résultat enregistré" : "Refusé",
+      description: resultat.status === "ok"
+        ? "Le diagnostic tient maintenant sa preuve — l'examen est forward-only."
+        : "message" in resultat ? resultat.message : "Erreur",
+      variant: resultat.status === "ok" ? "default" : "destructive",
+    });
   }
 
   return (
@@ -133,9 +155,42 @@ export function ConsultationHistory({ patient }: { patient: Patient }) {
                 {consult.notes}
               </p>
             )}
+            {/* P1-8 — examens de laboratoire embarqués : commande → résultat. */}
+            {consult.examens.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {consult.examens.map((examen) => (
+                  <li key={examen.id} className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-2.5 py-1.5 text-xs">
+                    <FlaskConical className="h-3 w-3 text-muted-foreground" aria-hidden />
+                    <span className="font-medium">{libelleTypeExamen(examen.type)}</span>
+                    {examen.statut === "resultat" ? (
+                      <span className={examen.positif ? "font-medium text-emerald-700" : "text-muted-foreground"}>
+                        {examen.resultat}{examen.positif === true ? " (positif)" : examen.positif === false ? " (négatif)" : ""}
+                      </span>
+                    ) : (
+                      <Badge className="bg-amber-100 text-amber-800">Résultat attendu</Badge>
+                    )}
+                    {examen.statut !== "resultat" && peutLabo && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="ml-auto h-7"
+                        onClick={() => void saisirResultat(examen.id)}
+                      >
+                        Saisir le résultat
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         ))}
       </CardContent>
     </Card>
   );
+}
+
+/** Libellé lisible d'un type d'examen (P1-8). */
+function libelleTypeExamen(type: string): string {
+  return TYPES_EXAMENS.find((t) => t.value === type)?.label ?? type;
 }

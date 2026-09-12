@@ -116,6 +116,8 @@ export interface ExamDraft {
   temperature: string;
   weight: string;
   notes: string;
+  /** P1-8 — examens de laboratoire commandés avec l'acte (TDR…). */
+  examensCommandes: string[];
 }
 
 export const EMPTY_EXAM: ExamDraft = {
@@ -126,6 +128,7 @@ export const EMPTY_EXAM: ExamDraft = {
   temperature: "",
   weight: "",
   notes: "",
+  examensCommandes: [],
 };
 
 /** Diagnostic résolu (référentiel ou saisie libre) — vide si non défini. */
