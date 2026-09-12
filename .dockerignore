@@ -1,0 +1,20 @@
+# Contexte de build Docker (racine du monorepo) — seul frontend/ est requis,
+# cf. Dockerfile racine. On exclut tout le reste pour un build rapide et
+# déterministe (le backend a son propre Dockerfile, non utilisé ici).
+.git
+.github
+.vscode
+.idea
+backend
+docs
+scripts
+node_modules
+**/node_modules
+**/.next
+**/.turbo
+**/.vercel
+**/.DS_Store
+# Aucun .env ne doit entrer dans l'image (démo = adaptateur intégré par défaut)
+**/.env
+**/.env.local
+**/.env.production
