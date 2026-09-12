@@ -45,6 +45,75 @@ export function decoderJeton(jeton: string | null | undefined): DemoToken | null
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Défis d'authentification SANS ÉTAT (serverless-safe).              */
+/* ------------------------------------------------------------------ */
+
+export interface DefiAuth {
+  /** email (MFA staff) ou téléphone 8 chiffres (OTP patient). */
+  cible: string;
+  code: string;
+  exp: number; // epoch secondes
+}
+
+/**
+ * Encode un défi MFA/OTP en jeton « defi.<base64url> ».
+ *
+ * Vercel exécute les routes sur des lambdas qui se réchauffent/se
+ * recréent indépendamment : un code stocké dans la Map mémoire du
+ * serveur démo peut être ÉMIS par l'instance A puis VÉRIFIÉ par
+ * l'instance B → « Code invalide ou expiré » systématique (3e échec
+ * de déploiement : tout fonctionnait en local, plus rien en ligne).
+ * Le défi voyage donc avec le client et revient à la vérification.
+ * Posture démo inchangée : le code est de toute façon affiché
+ * (codeDemo) — en production le module notification garde l'état.
+ */
+export function encoderDefi(cible: string, code: string, dureeSecondes = 300): string {
+  const exp = Math.floor(Date.now() / 1000) + dureeSecondes;
+  return `defi.${Buffer.from(JSON.stringify({ cible, code, exp })).toString("base64url")}`;
+}
+
+/** Décode un jeton de défi (null si malformé ou expiré). */
+export function decoderDefi(jeton: string | null | undefined): DefiAuth | null {
+  if (!jeton || !jeton.startsWith("defi.")) return null;
+  try {
+    const d = JSON.parse(Buffer.from(jeton.slice(5), "base64url").toString()) as DefiAuth;
+    if (typeof d.cible !== "string" || typeof d.code !== "string" || typeof d.exp !== "number") {
+      return null;
+    }
+    if (d.exp * 1000 < Date.now()) return null;
+    return d;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Vérifie un code MFA/OTP : d'abord par jeton de défi (sans état,
+ * robuste sur serverless), puis par Map mémoire (back-compat).
+ * Consomme le défi en cas de succès (usage unique).
+ */
+export function verifierDefi(
+  defi: string | null | undefined,
+  cible: string,
+  code: string | null | undefined,
+  memoire: Map<string, string>,
+): boolean {
+  const codePropose = code?.trim() ?? "";
+  if (!codePropose) return false;
+  const d = decoderDefi(defi);
+  if (d && d.cible === cible && d.code === codePropose) {
+    memoire.delete(cible);
+    return true;
+  }
+  const attendu = memoire.get(cible);
+  if (attendu === codePropose) {
+    memoire.delete(cible);
+    return true;
+  }
+  return false;
+}
+
 function problem(status: number, title: string, detail: string) {
   return NextResponse.json(
     { type: "about:blank", title, detail, status },

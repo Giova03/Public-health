@@ -1,18 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getState } from "@/lib/demo/seed";
-import { encoderJeton, motDePasseDemoValide } from "@/lib/demo/guard";
+import { encoderDefi, encoderJeton, motDePasseDemoValide, verifierDefi } from "@/lib/demo/guard";
 
 /**
  * POST /api/v1/auth/login — authentification staff (V14, I3).
  * BCrypt côté backend ; ici miroir démo avec vérification réelle du
  * mot de passe commun + MFA (défi 401 avec code renvoyé — posture démo
  * documentée : en production, le module notification envoie le code).
+ * Le défi MFA est SANS ÉTAT (jeton « defi. ») : l’émission et la
+ * vérification peuvent toucher deux lambdas Vercel différents.
  */
 export async function POST(requete: NextRequest) {
   const corps = await requete.json().catch(() => null) as {
     email?: string;
     motDePasse?: string;
     codeMfa?: string;
+    defi?: string;
   } | null;
   if (!corps?.email || !corps?.motDePasse) {
     return NextResponse.json(
@@ -50,20 +53,19 @@ export async function POST(requete: NextRequest) {
         email,
         detail: `Code MFA requis — un code à 6 chiffres vient d'être généré (démonstration : ${code})`,
         codeDemo: code,
+        defi: encoderDefi(email, code),
         status: 401,
       },
       { status: 401 },
     );
   }
   if (utilisateur.mfaEnabled) {
-    const attendu = state.mfaChallenges.get(email);
-    if (!attendu || attendu !== corps.codeMfa?.trim()) {
+    if (!verifierDefi(corps.defi, email, corps.codeMfa, state.mfaChallenges)) {
       return NextResponse.json(
         { title: "Authentification refusée", detail: "Code MFA invalide ou expiré", status: 401 },
         { status: 401 },
       );
     }
-    state.mfaChallenges.delete(email);
   }
 
   utilisateur.lastSeenAt = new Date().toISOString();

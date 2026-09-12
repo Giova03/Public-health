@@ -4,31 +4,42 @@ Application clinique de la plateforme nationale de santé du Burkina Faso.
 **Next.js 16 · TypeScript strict · Tailwind CSS 4 · shadcn/ui · Lucide ·
 framer-motion · zustand · IndexedDB (offline-first).**
 
-## Connexion & rôles (v0.5)
+## Connexion & rôles (V14 — auth réelle)
 
-L'application s'ouvre sur un **écran de connexion multi-profils** :
+L'application s'ouvre sur un **écran de connexion réel** (plus de « nom
+libre + rôle choisi dans une liste ») :
 
-- **Patient** — téléphone (+226) + code SMS à usage unique (OTP affiché en
-  démo). Il accède au **portail patient** : ses informations (MPI), ses
-  ordonnances avec l'avancement réel de la dispensation, ses paiements.
-  Comptes démo : `70123456` (Aïcha WÉDRAOGO), `66884422`, `74112233`.
-- **Professionnel de santé** — nom + rôle + structure. Le poste de santé
-  s'ouvre avec une **navigation filtrée par rôle** (`lib/session.ts`) :
+- **Professionnel de santé** — **email + mot de passe**
+  (`POST /api/v1/auth/login`, mot de passe commun démo `Demo1234!`),
+  **MFA à code 6 chiffres pour le superviseur** (accès SNIS) et
+  l'administrateur. Le jeton est exigé sur toutes les routes
+  `/api/v1/*` (401 anonyme, 403 permission insuffisante) et le
+  **RBAC est appliqué** par la matrice 6 rôles × 10 permissions
+  (miroir exact de la V12 backend, `src/lib/rbac.ts`).
 
-  | Rôle | Vues accessibles |
-  | ---- | ---------------- |
-  | Agent de saisie (MPI) | Tableau de bord, Patients, Synchronisation |
-  | Infirmier | + Consultation |
-  | Médecin | + Ordonnances |
-  | Pharmacien | Tableau de bord, Ordonnances, Synchronisation |
-  | Caissier | Tableau de bord, Patients, Paiements, Synchronisation |
-  | Superviseur | Tableau de bord, Patients, Ordonnances, Paiements, Synchronisation, Back-office |
-  | Administrateur | Toutes les vues + Back-office |
+  | Compte démo (email) | Rôle | MFA |
+  | ------------------- | ---- | --- |
+  | `infirmier@demo.bf` | Infirmier/ICP | — |
+  | `medecin@demo.bf` | Médecin | — |
+  | `medecin2@demo.bf` | Médecin | — |
+  | `pharmacien@demo.bf` | Pharmacien | — |
+  | `pharmacien2@demo.bf` | Pharmacien | **oui** |
+  | `caissier@demo.bf` | Agent financier (caisse) | — |
+  | `superviseur@demo.bf` | Superviseur | **oui** (débloque les rapports SNIS) |
+  | `admin@demo.bf` | Administrateur | **oui** |
 
-La session démo vit dans `localStorage` (`ph.demo.session.v1`). En
-production, l'authentification est portée par le module sécurité du backend
-(OIDC/Keycloak, MFA pour les rôles sensibles) — seul le point d'entrée de
-session change côté front.
+- **Patient** — **téléphone (8 chiffres) + code SMS à usage unique**
+  (OTP 4 chiffres affiché en démo). Périmètre strict : il ne voit QUE
+  ses propres données (403 sinon). Comptes démo : `70123456`
+  (Aïcha WÉDRAOGO), `66884422`, `74112233`.
+
+Les défis MFA/OTP sont **sans état** (jeton « defi. » renvoyé au client
+puis re-soumis) : l'émission et la vérification peuvent toucher deux
+instances lambdas Vercel différentes sans casser la connexion.
+
+La session vit dans `localStorage` (`ph.session.v2`). En production,
+l'authentification HS256/JWT vit côté backend Spring Boot (BCrypt,
+MFA, audit des lectures) — le contrat de routes est identique.
 
 ## Matrice des rôles et permissions (v0.6)
 
@@ -78,6 +89,26 @@ Environnement (voir `.env.example`) :
   (`src/app/api/v1/*` : contrats fidèles du backend, seed Burkina) ;
 - `NEXT_PUBLIC_API_BASE_URL=https://…` → API Spring Boot réelle
   (dossier `../backend`), CORS à prévoir côté API.
+
+## Déploiement Vercel (rappel de configuration)
+
+Le projet Vercel doit être réglé **exactement** ainsi (sinon le déploiement
+échoue ou l'application démarre « cassée ») :
+
+| Réglage | Valeur | Où |
+| ------- | ------ | -- |
+| **Root Directory** | `frontend` | Settings → General → Root Directory |
+| Framework preset | Next.js (détecté via `frontend/vercel.json`) | automatique |
+| Build Command | `npm run build` (`vercel.json`) | automatique |
+| Node.js Version | 22.x | Settings → General → Node.js Version |
+| `NEXT_PUBLIC_API_BASE_URL` | **VIDE / non définie** en démo | Settings → Environment Variables |
+
+⚠️ **Démo et serverless** : l'état de démonstration (`src/lib/demo/seed.ts`)
+vit en mémoire par instance lambda. Les **défis MFA/OTP sont sans état**
+(jetons « defi. », robustes multi-instances) ; en revanche les données
+**mutées** (patients créés, paiements…) peuvent redevenir la seed après un
+redémarrage à froid — c'est la limite documentée de l'adaptateur démo ;
+la persistance réelle vit dans PostgreSQL côté backend (Render).
 
 ## Architecture
 

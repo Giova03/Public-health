@@ -14,6 +14,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { dernierCodeMfa } from "@/lib/session";
 import {
   ArrowLeft,
   ArrowRight,
@@ -154,6 +155,8 @@ export function LoginView() {
   const [staffEmail, setStaffEmail] = useState("");
   const [staffPassword, setStaffPassword] = useState("");
   const [staffMfa, setStaffMfa] = useState("");
+  /** Code MFA renvoyé par le serveur démo (affiché à l'étape 2 — posture démo). */
+  const [mfaAttendu, setMfaAttendu] = useState<string | null>(null);
 
   async function sendCode() {
     const digits = normalizePhone(phone);
@@ -198,10 +201,11 @@ export function LoginView() {
     const resultat = await loginStaff(staffEmail.trim(), staffPassword);
     setEnCours(false);
     if (resultat === "MFA") {
+      setMfaAttendu(dernierCodeMfa());
       setStep("staff-mfa");
       toast({
         title: "Double facteur requise",
-        description: "Un code à 6 chiffres a été généré (renvoyé en démo : aucune passerelle SMS livrée).",
+        description: "Un code à 6 chiffres a été généré — il est affiché à l'étape suivante (posture démo).",
       });
       return;
     }
@@ -594,9 +598,28 @@ export function LoginView() {
                 </h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">
                   Ce compte est protégé par la MFA. Saisissez le code à 6
-                  chiffres (en démo, il est affiché dans le toast — en
+                  chiffres (en démo, il est affiché ci-dessous — en
                   production, il part par SMS/email).
                 </p>
+
+                {mfaAttendu && (
+                  <div className="mt-5 flex items-start gap-2.5 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs leading-relaxed text-emerald-800 dark:text-emerald-300">
+                    <ShieldCheck
+                      className="mt-0.5 h-4 w-4 shrink-0"
+                      aria-hidden="true"
+                    />
+                    <span>
+                      <strong className="font-semibold">Code de démonstration</strong>{" "}
+                      — votre code à usage unique est{" "}
+                      <strong className="tnum font-bold">{mfaAttendu}</strong>.
+                      <br />
+                      <span className="text-emerald-700/80 dark:text-emerald-400/80">
+                        En production, ce code part par SMS/email et
+                        n&apos;est jamais affiché à l&apos;écran.
+                      </span>
+                    </span>
+                  </div>
+                )}
                 <div className="mt-6 space-y-4">
                   <div className="space-y-2">
                     <Label htmlFor="staff-mfa">Code à 6 chiffres</Label>

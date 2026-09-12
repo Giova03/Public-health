@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getState } from "@/lib/demo/seed";
+import { encoderDefi } from "@/lib/demo/guard";
 
-/** POST /api/v1/auth/patient/otp — étape 1 : téléphone → code (I13/I27). */
+/** POST /api/v1/auth/patient/otp — étape 1 : téléphone → code (I13/I27).
+ * Le défi est SANS ÉTAT (jeton « defi. ») : émission et vérification
+ * peuvent toucher deux lambdas Vercel différents. */
 export async function POST(requete: NextRequest) {
   const corps = await requete.json().catch(() => null) as { telephone?: string } | null;
   const chiffres = (corps?.telephone ?? "").replace(/\D/g, "");
@@ -36,6 +39,7 @@ export async function POST(requete: NextRequest) {
     {
       message: "Code envoyé (démonstration : il est affiché ici, jamais en production)",
       codeDemo: code,
+      defi: encoderDefi(chiffres, code),
     },
     { status: 202 },
   );

@@ -95,13 +95,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   loginStaff: async (email, motDePasse, codeMfa) => {
-    const { status, body } = await postJson<LoginStaffReponse & { mfaRequise?: boolean; codeDemo?: string; detail?: string }>(
-      "/api/v1/auth/login",
-      { email, motDePasse, codeMfa },
-    );
+    const { status, body } = await postJson<
+      LoginStaffReponse & { mfaRequise?: boolean; codeDemo?: string; defi?: string; detail?: string }
+    >("/api/v1/auth/login", { email, motDePasse, codeMfa, defi: dernierDefiMfaJeton });
     if (status === 401 && body?.mfaRequise) {
-      // Défi MFA : le code démo est porté par la réponse (posture démo).
+      // Défi MFA : le code démo est porté par la réponse (posture démo) ;
+      // le jeton de défi l'est aussi (défis sans état — serverless-safe,
+      // cf. 3e échec Vercel : émission/vérification sur lambdas distincts).
       dernierDefiMfa = body.codeDemo ?? "";
+      dernierDefiMfaJeton = body.defi ?? "";
       return "MFA";
     }
     if (status !== 200 || !body?.jeton) {
@@ -124,18 +126,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
   },
 
   demanderOtpPatient: async (telephone) => {
-    const { status, body } = await postJson<{ message?: string; codeDemo?: string }>(
+    const { status, body } = await postJson<{ message?: string; codeDemo?: string; defi?: string }>(
       "/api/v1/auth/patient/otp",
       { telephone },
     );
     if (status !== 202) return null;
+    dernierDefiOtpJeton = body.defi ?? "";
     return body.codeDemo ?? null;
   },
 
   loginPatient: async (telephone, code) => {
     const { status, body } = await postJson<{ jeton?: string; patientId?: string; nom?: string }>(
       "/api/v1/auth/patient/verify",
-      { telephone, code },
+      { telephone, code, defi: dernierDefiOtpJeton },
     );
     if (status !== 200 || !body?.jeton || !body.patientId) {
       set({ erreurAuth: "Code invalide ou expiré" });
@@ -167,6 +170,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
 
 /** Dernier défi MFA démo (code renvoyé par le serveur — posture démo). */
 let dernierDefiMfa = "";
+/** Jeton de défi MFA sans état (serverless-safe) — consommé à la 2e requête. */
+let dernierDefiMfaJeton = "";
+/** Jeton de défi OTP patient sans état — consommé à la vérification. */
+let dernierDefiOtpJeton = "";
 
 export function dernierCodeMfa(): string {
   return dernierDefiMfa;

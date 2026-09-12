@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getState } from "@/lib/demo/seed";
-import { encoderJeton } from "@/lib/demo/guard";
+import { encoderJeton, verifierDefi } from "@/lib/demo/guard";
 
-/** POST /api/v1/auth/patient/verify — étape 2 : code → jeton patient. */
+/** POST /api/v1/auth/patient/verify — étape 2 : code → jeton patient.
+ * Vérification SANS ÉTAT d'abord (jeton « defi. », serverless-safe),
+ * puis retour sur la Map mémoire (back-compat). */
 export async function POST(requete: NextRequest) {
-  const corps = await requete.json().catch(() => null) as { telephone?: string; code?: string } | null;
+  const corps = await requete.json().catch(() => null) as {
+    telephone?: string;
+    code?: string;
+    defi?: string;
+  } | null;
   const chiffres = (corps?.telephone ?? "").replace(/\D/g, "");
   const state = getState();
-  const attendu = state.patientOtp.get(chiffres);
-  if (!attendu || attendu !== corps?.code?.trim()) {
+  if (!verifierDefi(corps?.defi, chiffres, corps?.code, state.patientOtp)) {
     return NextResponse.json(
       { title: "Code refusé", detail: "Code invalide ou expiré", status: 401 },
       { status: 401 },
     );
   }
-  state.patientOtp.delete(chiffres);
   const patient = state.patients.find((p) => p.active && p.phone === chiffres);
   if (!patient) {
     return NextResponse.json(
