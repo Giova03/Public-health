@@ -28,6 +28,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useIsHydrated } from "@/hooks/use-hydrated";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/session";
 import { formatXof } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { InitiatePaymentDialog } from "./initiate-dialog";
@@ -158,6 +159,10 @@ export function PaymentsView() {
   const runReconciliation = useAppStore((s) => s.runReconciliation);
   const { toast } = useToast();
   const hydrated = useIsHydrated();
+  // P0-3 (audit, étape 3) : initiation = paiement:initier (caisse/ICP/admin),
+  // réconciliation = paiement:reconcilier (admin — le run qui fait foi).
+  const peutInitier = usePermission("paiement:initier");
+  const peutReconcilier = usePermission("paiement:reconcilier");
 
   const [tab, setTab] = useState<PaymentFilter>("ALL");
   const [query, setQuery] = useState("");
@@ -192,6 +197,16 @@ export function PaymentsView() {
 
   async function handleReconciliation() {
     if (reconciling) return;
+    // Refus EXPLICITE avant le voyage API (403 de toute façon garanti).
+    if (!peutReconcilier) {
+      toast({
+        variant: "destructive",
+        title: "Action refusée — réconciliation admin",
+        description:
+          "La permission paiement:reconcilier est requise : seul l'admin déclenche le run qui fait foi (le job 23 h reste automatique).",
+      });
+      return;
+    }
     setReconciling(true);
     const result = await runReconciliation();
     setReconciling(false);
@@ -236,9 +251,13 @@ export function PaymentsView() {
           <Button
             variant="outline"
             onClick={() => void handleReconciliation()}
-            disabled={reconciling}
+            disabled={reconciling || !peutReconcilier}
             className="h-11 flex-1 md:flex-none"
-            title="Lance le job nocturne simulé (23 h) : réconciliation fait-foi"
+            title={
+              peutReconcilier
+                ? "Lance le job nocturne simulé (23 h) : réconciliation fait-foi"
+                : "Masqué hors admin : paiement:reconcilier requis (le run 23 h reste automatique)"
+            }
           >
             {reconciling ? (
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -247,14 +266,24 @@ export function PaymentsView() {
             )}
             <span className="sr-only sm:not-sr-only">Réconciliation</span>
           </Button>
-          <Button
-            variant="medical"
-            onClick={() => setInitiateOpen(true)}
-            className="h-11 flex-1 md:flex-none"
-          >
-            <Banknote className="size-4" aria-hidden="true" />
-            Encaisser
-          </Button>
+          {peutInitier ? (
+            <Button
+              variant="medical"
+              onClick={() => setInitiateOpen(true)}
+              className="h-11 flex-1 md:flex-none"
+            >
+              <Banknote className="size-4" aria-hidden="true" />
+              Encaisser
+            </Button>
+          ) : (
+            <p
+              className="flex-1 text-xs text-muted-foreground md:flex-none"
+              title="Masquage P0-3 : votre rôle ne porte pas paiement:initier"
+            >
+              Encaissement masqué : <code>paiement:initier</code> requis — le
+              registre reste consultable.
+            </p>
+          )}
         </div>
       </div>
 

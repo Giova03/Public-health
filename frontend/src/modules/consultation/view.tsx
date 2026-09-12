@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
-import { useCurrentUser } from "@/lib/session";
+import { useCurrentUser, usePermission } from "@/lib/session";
 import type { PrescriptionItem } from "@/lib/types";
 import { ConsultationStepper } from "./components/stepper";
 import { ExamStep } from "./components/exam-step";
@@ -48,6 +48,9 @@ export function ConsultationView() {
   const createConsultation = useAppStore((s) => s.createConsultation);
   const commanderExamen = useAppStore((s) => s.commanderExamen);
   const user = useCurrentUser();
+  // P0-3 (audit, étape 3) : l'acte clinique exige consultation:ecrire —
+  // le superviseur (consultation:lire) voit la vue en LECTURE SEULE.
+  const peutConsulter = usePermission("consultation:ecrire");
 
   const [step, setStep] = useState(0);
   const [exam, setExam] = useState<ExamDraft>(EMPTY_EXAM);
@@ -106,6 +109,18 @@ export function ConsultationView() {
 
   const submit = async () => {
     if (!patient || !linesValid) return;
+    // Refus EXPLICITE (pas un clic silencieux) : la garde d'affichage peut
+    // être contournée (état résiduel, session expirée) — l'API refuse de
+    // toute façon (403), on le dit ici AVANT le voyage.
+    if (!peutConsulter) {
+      toast({
+        title: "Action refusée — consultation impossible",
+        description:
+          "La permission consultation:ecrire est requise (rôle ne portant pas l'acte clinique). Le superviseur consulte l'historique, il ne consigne pas l'acte.",
+        variant: "destructive",
+      });
+      return;
+    }
     setSubmitting(true);
 
     // V14 (I4) : l'ACTE CLINIQUE est PERSISTÉ EN ENTIER — motif,
@@ -228,13 +243,29 @@ export function ConsultationView() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <ConsultationStepper
-            current={step}
-            completed={completed}
-            onStep={setStep}
-          />
+          {!peutConsulter && (
+            <div
+              role="status"
+              className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 p-3.5 text-sm text-muted-foreground"
+            >
+              <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p>
+                Lecture seule : votre rôle ne porte pas <code>consultation:ecrire</code>.
+                L&apos;acte clinique (motif, constantes, diagnostic, ordonnance) est consigné
+                par le médecin, l&apos;ICP ou l&apos;admin — l&apos;historique des consultations reste
+                consultable dans le dossier patient.
+              </p>
+            </div>
+          )}
+          {peutConsulter && (
+            <ConsultationStepper
+              current={step}
+              completed={completed}
+              onStep={setStep}
+            />
+          )}
 
-          {step === 0 && (
+          {peutConsulter && step === 0 && (
             <PatientStep
               patient={patient}
               patients={patients}
@@ -243,11 +274,11 @@ export function ConsultationView() {
             />
           )}
 
-          {step === 1 && (
+          {peutConsulter && step === 1 && (
             <ExamStep exam={exam} onChange={(patch) => setExam((e) => ({ ...e, ...patch }))} />
           )}
 
-          {step === 2 && (
+          {peutConsulter && step === 2 && (
             <div className="space-y-4">
               {patient && diagnosis.trim().length > 0 && (
                 <div className="rounded-xl border bg-muted/40 p-3.5 text-sm">
@@ -280,6 +311,7 @@ export function ConsultationView() {
             </div>
           )}
 
+          {peutConsulter && (
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             {step > 0 && (
               <Button
@@ -315,6 +347,7 @@ export function ConsultationView() {
               </Button>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

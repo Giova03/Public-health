@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { PackagePlus, TriangleAlert } from "lucide-react";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,9 @@ export function StockView() {
   const stockMouvements = useAppStore((s) => s.stockMouvements);
   const loadStock = useAppStore((s) => s.loadStock);
   const createStockMouvement = useAppStore((s) => s.createStockMouvement);
+  // P0-3 (audit, étape 3) : stock:gerer (vue déjà réservée, défense en
+  // profondeur : session expirée / état résiduel → refus explicite ici).
+  const peutGerer = usePermission("stock:gerer");
   const { toast } = useToast();
 
   const [code, setCode] = useState("");
@@ -32,6 +36,14 @@ export function StockView() {
   useEffect(() => { void loadStock(); }, [loadStock]);
 
   async function mouvement(type: "reception" | "ajustement") {
+    if (!peutGerer) {
+      toast({
+        title: "Action refusée — stock",
+        description: "La permission stock:gerer est requise (pharmacien/admin).",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!code.trim() || !quantite) {
       toast({ title: "Champs manquants", description: "Code médicament et quantité obligatoires.", variant: "destructive" });
       return;
@@ -110,10 +122,10 @@ export function StockView() {
             <Input value={motif} onChange={(e) => setMotif(e.target.value)} placeholder="Réception CAMEG…" className="rounded-full" />
           </div>
           <div className="flex items-end gap-2">
-            <Button variant="medical" className="rounded-full" onClick={() => mouvement("reception")}>
+            <Button variant="medical" className="rounded-full" onClick={() => mouvement("reception")} disabled={!peutGerer}>
               <PackagePlus className="h-4 w-4" /> Réception
             </Button>
-            <Button variant="outline" className="rounded-full" onClick={() => mouvement("ajustement")}>
+            <Button variant="outline" className="rounded-full" onClick={() => mouvement("ajustement")} disabled={!peutGerer}>
               Inventaire
             </Button>
           </div>

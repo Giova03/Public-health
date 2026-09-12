@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { CreatePatientInput, DuplicateCandidate, Patient } from "@/lib/types";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/session";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -49,6 +50,9 @@ export function PatientsList() {
   const online = useAppStore((s) => s.simulatedOnline);
   const selectPatient = useAppStore((s) => s.selectPatient);
   const { toast } = useToast();
+  // P0-3 (audit, étape 3) : création = patient:ecrire. Le pharmacien, le
+  // caissier et le superviseur (patient:lire) restent en lecture/Recherche.
+  const peutCreer = usePermission("patient:ecrire");
 
   const { query, setQuery, results, serverOnlyIds, searching, mirrorCount } =
     usePatientSearch(patients, online);
@@ -147,14 +151,24 @@ export function PatientsList() {
             />
           )}
         </div>
-        <Button
-          variant="medical"
-          className="h-11 w-full px-5 sm:w-auto"
-          onClick={() => setFormOpen(true)}
-        >
-          <UserPlus className="h-4 w-4" aria-hidden="true" />
-          Nouveau patient
-        </Button>
+        {peutCreer ? (
+          <Button
+            variant="medical"
+            className="h-11 w-full px-5 sm:w-auto"
+            onClick={() => setFormOpen(true)}
+          >
+            <UserPlus className="h-4 w-4" aria-hidden="true" />
+            Nouveau patient
+          </Button>
+        ) : (
+          <p
+            className="w-full text-xs text-muted-foreground sm:w-auto"
+            title="Masquage P0-3 : votre rôle ne porte pas patient:ecrire"
+          >
+            Création masquée : <code>patient:ecrire</code> requis — la recherche
+            et la consultation des dossiers restent ouvertes.
+          </p>
+        )}
       </div>
 
       {/* Compteur de résultats */}
@@ -192,6 +206,7 @@ export function PatientsList() {
         <EmptyResults
           query={query.trim()}
           online={online}
+          peutCreer={peutCreer}
           onCreate={() => setFormOpen(true)}
         />
       ) : (
@@ -307,10 +322,13 @@ function ListSkeleton() {
 function EmptyResults({
   query,
   online,
+  peutCreer,
   onCreate,
 }: {
   query: string;
   online: boolean;
+  /** P0-3 : sans patient:ecrire, pas de CTA de création — on l'explique. */
+  peutCreer: boolean;
   onCreate: () => void;
 }) {
   if (query === "") {
@@ -330,10 +348,17 @@ function EmptyResults({
               coupé, les dossiers nationaux arriveront à la reconnexion.
             </p>
           </div>
-          <Button variant="outline" className="min-h-11" onClick={onCreate}>
-            <UserPlus className="h-4 w-4" aria-hidden="true" />
-            Créer un dossier patient
-          </Button>
+          {peutCreer ? (
+            <Button variant="outline" className="min-h-11" onClick={onCreate}>
+              <UserPlus className="h-4 w-4" aria-hidden="true" />
+              Créer un dossier patient
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              La création de dossier exige <code>patient:ecrire</code> — pas
+              porté par votre rôle.
+            </p>
+          )}
         </div>
       </Card>
     );

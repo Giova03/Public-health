@@ -72,6 +72,9 @@ export function PrescriptionDetail({
   const counterEntry = useAppStore((s) => s.counterEntry);
   const cancelPrescription = useAppStore((s) => s.cancelPrescription);
   const peutAnnuler = usePermission("prescription:ecrire");
+  // P0-3 (audit, étape 3) : la dispensation = dispenser (pharmacien, ICP,
+  // admin) — le médecin prescrit, il ne sert pas au comptoir.
+  const peutDispenser = usePermission("dispenser");
   const user = useCurrentUser();
 
   const [dispenseOpen, setDispenseOpen] = useState(false);
@@ -260,15 +263,28 @@ export function PrescriptionDetail({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="medical"
-              className="h-11 w-full sm:w-auto"
-              onClick={() => setDispenseOpen(true)}
-              disabled={prescription.status !== "ACTIVE" || !hasRemaining}
-            >
-              <Package className="h-4 w-4" aria-hidden="true" />
-              Dispenser
-            </Button>
+            {peutDispenser ? (
+              <Button
+                variant="medical"
+                className="h-11 w-full sm:w-auto"
+                onClick={() => setDispenseOpen(true)}
+                disabled={prescription.status !== "ACTIVE" || !hasRemaining}
+              >
+                <Package className="h-4 w-4" aria-hidden="true" />
+                Dispenser
+              </Button>
+            ) : (
+              prescription.status === "ACTIVE" &&
+              hasRemaining && (
+                <p
+                  className="flex min-h-11 w-full items-center text-xs text-muted-foreground sm:w-auto"
+                  title="Masquage P0-3 : votre rôle ne porte pas dispenser"
+                >
+                  Dispensation masquée : <code>dispenser</code> requis — le
+                  comptoir appartient au pharmacien/ICP.
+                </p>
+              )
+            )}
             {peutAnnuler && prescription.status === "ACTIVE" && (
               <>
                 <Button

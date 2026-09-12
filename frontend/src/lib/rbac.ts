@@ -221,7 +221,7 @@ export const RBAC_ENFORCED_TODAY: { title: string; detail: string }[] = [
   {
     title: "Gardes front par permission",
     detail:
-      "Les vues masquent les actions hors périmètre (roleHasPermission) et les routes mock vérifient le jeton (401/403 honnêtes).",
+      "Toutes les vues masquent les actions hors périmètre (usePermission — consultation, création MPI, caisse, initiation, réconciliation, dispensation, stock, RDV, références, labo, décès) et les routes mock vérifient le jeton (401/403 honnêtes). Sans session : aucune action offerte.",
   },
 ];
 

@@ -41,6 +41,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useIsHydrated } from "@/hooks/use-hydrated";
 import { useAppStore } from "@/lib/store";
+import { usePermission } from "@/lib/session";
 import type { PaymentRecord, PaymentState } from "@/lib/types";
 import { formatDate, formatTime, formatXof } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -70,6 +71,9 @@ export function PaymentDetail({ paymentId, onBack }: PaymentDetailProps) {
   const patients = useAppStore((s) => s.patients);
   const prescriptions = useAppStore((s) => s.prescriptions);
   const progressPayment = useAppStore((s) => s.progressPayment);
+  // P0-3 (audit, étape 3) : les transitions simulées (webhook opérateur)
+  // exigent paiement:lire côté API — miroir exact côté UI.
+  const peutPiloter = usePermission("paiement:lire");
   const selectPrescription = useAppStore((s) => s.selectPrescription);
   const goTo = useAppStore((s) => s.goTo);
   const simulatedOnline = useAppStore((s) => s.simulatedOnline);
@@ -363,7 +367,16 @@ export function PaymentDetail({ paymentId, onBack }: PaymentDetailProps) {
             <h2 className="text-sm font-semibold text-foreground">
               Actions contextuelles
             </h2>
-            {targets.length === 0 ? (
+            {!peutPiloter ? (
+              <div className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <p>
+                  Lecture seule : les transitions exigent <code>paiement:lire</code> —
+                  votre rôle ne pilote pas la machine d&apos;états (les webhooks
+                  opérateur réels ne passent jamais par cet écran).
+                </p>
+              </div>
+            ) : targets.length === 0 ? (
               <div className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                 <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 <p>

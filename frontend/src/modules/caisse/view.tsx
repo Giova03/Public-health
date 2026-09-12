@@ -22,8 +22,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
-import { useCurrentUser } from "@/lib/session";
-import { roleHasPermission } from "@/lib/rbac";
+import { useCurrentUser, usePermission } from "@/lib/session";
 import { formatXof, EXONERATION_NATURES, type ExonerationNature, type FraisAccesTicket } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +68,10 @@ export function CaisseView() {
   const { toast } = useToast();
   const user = useCurrentUser();
   const structure = user.facility && user.facility !== "—" ? user.facility : "CSPS Ouaga 12";
-  const peutInitier = roleHasPermission(user.role, "paiement:initier");
+  // P0-3 (audit, étape 3) : garde renforcée — l'ancien test portait sur le
+  // rôle du fallback (INFIRMIER, qui PORTE paiement:initier) : un visiteur
+  // non connecté voyait la caisse active. usePermission exige une SESSION.
+  const peutInitier = usePermission("paiement:initier");
 
   // Ouverture de ticket : recherche patient + montant.
   const [recherche, setRecherche] = useState("");
