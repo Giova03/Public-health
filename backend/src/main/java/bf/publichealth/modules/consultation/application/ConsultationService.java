@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import bf.publichealth.modules.audit.adapter.persistence.AuditEntryEntity;
 import bf.publichealth.modules.audit.application.AuditRecorder;
 import bf.publichealth.modules.consultation.adapter.persistence.ConsultationJdbc;
+import bf.publichealth.modules.payments.application.FraisAccesService;
 
 /**
  * Service consultation — l'ACTE CLINIQUE ENFIN PERSISTÉ (I4).
@@ -20,6 +21,8 @@ import bf.publichealth.modules.consultation.adapter.persistence.ConsultationJdbc
  * clinical.encounter / observation / condition. Règles :</p>
  * <ul>
  *   <li>le patient doit exister et être VIVANT (I15 — décès scellé) ;</li>
+ *   <li>I5 : le ticket d'accès du jour doit être RÉGLÉ (payé ou
+ *       exonéré) AVANT l'acte — le parcours monétaire réel du BF ;</li>
  *   <li>idempotence offline par clientRequestId (rejeu = 200, paton V6) ;</li>
  *   <li>création auditée CONSULTATION_CREATED, avec l'acteur du jeton ;</li>
  *   <li>append-only : une erreur se corrige par contre-entrée
@@ -45,9 +48,20 @@ public class ConsultationService {
         }
     }
 
-    public ConsultationService(ConsultationJdbc consultations, AuditRecorder audit) {
+    /** I5 : ticket d'accès du jour absent ou non réglé → 402 à l'API. */
+    public static class FraisAccesManquantException extends RuntimeException {
+        public FraisAccesManquantException(String message) {
+            super(message);
+        }
+    }
+
+    private final FraisAccesService fraisAcces;
+
+    public ConsultationService(ConsultationJdbc consultations, AuditRecorder audit,
+                               FraisAccesService fraisAcces) {
         this.consultations = consultations;
         this.audit = audit;
+        this.fraisAcces = fraisAcces;
     }
 
     @Transactional
@@ -65,6 +79,17 @@ public class ConsultationService {
         }
         if (commande.diagnosticCode() == null || commande.diagnosticCode().isBlank()) {
             throw new PatientInvalideException("Le diagnostic CODÉ est obligatoire (I14)");
+        }
+
+        // I5 — le parcours monétaire réel : ticket d'accès réglé AVANT
+        // l'acte clinique (payé ou exonéré à la caisse). Communication
+        // inter-modules par service injecté (ADR-001).
+        String statutTicket = fraisAcces.statutReglementAujourdhui(
+                commande.patientId(), commande.facilityId());
+        if (!"paye".equals(statutTicket) && !"exonere".equals(statutTicket)) {
+            throw new FraisAccesManquantException("en_attente".equals(statutTicket)
+                    ? "Ticket d'accès EN ATTENTE à la caisse : encaissez ou exonérez avant la consultation"
+                    : "Aucun ticket d'accès pour aujourd'hui : passage à la caisse obligatoire avant la consultation");
         }
 
         UUID id = UUID.randomUUID();

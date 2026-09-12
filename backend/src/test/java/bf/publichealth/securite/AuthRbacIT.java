@@ -197,6 +197,8 @@ class AuthRbacIT {
     void consultationCompletePersistee() throws Exception {
         String jeton = login("medecin@demo.bf");
         String patient = creerPatient(jeton, "70" + telephoneAleatoire());
+        // I5 : le ticket d'accès du jour est réglé AVANT l'acte (parcours réel).
+        reglerTicketAcces(patient);
         var reponse = mockMvc.perform(post("/api/v1/consultations")
                         .header("Authorization", "Bearer " + jeton)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -517,6 +519,25 @@ class AuthRbacIT {
                  "constantes":{"taSystolique":120,"taDiastolique":80,
                                "temperatureC":38.6,"poidsKg":62}}
                 """.formatted(patientId, CSPS);
+    }
+
+    /** I5 : la caisse AVANT l'acte — ticket du jour encaissé par le caissier. */
+    private void reglerTicketAcces(String patientId) throws Exception {
+        String caissier = login("caissier@demo.bf");
+        String corps = "{\"patientId\":\"%s\",\"structureId\":\"%s\"}"
+                .formatted(patientId, CSPS);
+        var reponse = mockMvc.perform(post("/api/v1/frais-acces")
+                        .header("Authorization", "Bearer " + caissier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(corps))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String ticket = JsonPath.read(reponse.getResponse().getContentAsString(), "$.id");
+        mockMvc.perform(post("/api/v1/frais-acces/%s/encaisser".formatted(ticket))
+                        .header("Authorization", "Bearer " + caissier)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"montantXof\":1000}"))
+                .andExpect(status().isOk());
     }
 
     private static String telephoneAleatoire() {

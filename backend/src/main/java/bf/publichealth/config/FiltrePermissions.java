@@ -116,6 +116,12 @@ public class FiltrePermissions extends OncePerRequestFilter implements Ordered {
             new Regle("POST", "/api/v1/references/*/reception", RolesPermissions.REFERENCE_GERER),
             new Regle("POST", "/api/v1/references/*/hospitalisation", RolesPermissions.REFERENCE_GERER),
             new Regle("POST", "/api/v1/references/*/contre-reference", RolesPermissions.REFERENCE_GERER),
+            // --- frais d'accès (I5 : le ticket AVANT la consultation)
+            new Regle("POST", "/api/v1/frais-acces", RolesPermissions.PAIEMENT_INITIER),
+            new Regle("GET", "/api/v1/frais-acces", RolesPermissions.PAIEMENT_LIRE),
+            new Regle("GET", "/api/v1/frais-acces/*", RolesPermissions.PAIEMENT_LIRE),
+            new Regle("POST", "/api/v1/frais-acces/*/encaisser", RolesPermissions.PAIEMENT_INITIER),
+            new Regle("POST", "/api/v1/frais-acces/*/exonerer", RolesPermissions.PAIEMENT_INITIER),
             // --- paiements / facturation
             new Regle("POST", "/api/v1/payments", RolesPermissions.PAIEMENT_INITIER),
             new Regle("GET", "/api/v1/payments/*", RolesPermissions.PAIEMENT_LIRE),

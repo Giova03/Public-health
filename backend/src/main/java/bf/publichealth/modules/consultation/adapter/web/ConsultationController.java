@@ -76,6 +76,13 @@ public class ConsultationController {
                     e.getMessage());
             problem.setTitle("Consultation impossible");
             return ResponseEntity.of(problem).build();
+        } catch (ConsultationService.FraisAccesManquantException e) {
+            // I5 : 402 Payment Required — le parcours monétaire réel du BF.
+            ProblemDetail problem = ProblemDetail.forStatusAndDetail(
+                    HttpStatus.PAYMENT_REQUIRED, e.getMessage());
+            problem.setTitle("Frais d'accès requis");
+            problem.setProperty("etape", "caisse");
+            return ResponseEntity.of(problem).build();
         }
     }
 
